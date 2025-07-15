@@ -1577,12 +1577,12 @@ class IntegratedSocialMBTIAssessment:
     
     def calculate_enhanced_evaluation(self, state: IntegratedDynamicLambda3State, 
                                     responses: Dict[str, int]) -> Dict:
-        """拡張版評価の計算（元のEnhancedMBTIAssessmentから簡略版）"""
+        """拡張版評価の計算"""
         
-        # 機能不全スコアを計算
+        # 元の機能不全スコアを計算
         dysfunction_scores = self.calculate_dysfunction_scores(responses)
         
-        # 基本評価指標
+        # 基本評価指標（元の実装を考慮）
         indicators = {
             'core_stability': state.Λ_self_aspects['core'] > 0.5,
             'shadow_integration': state.Λ_self_aspects['shadow'] < state.Λ_self_aspects['core'],
@@ -1591,45 +1591,401 @@ class IntegratedSocialMBTIAssessment:
             'noise_control': state.perception_noise < 0.3,
             'tension_regulation': state.ρT < 0.8,
             'bodily_vitality': state.Λ_bod > 0.5,
+            'pulsation_balance': len(state.pulsation_history) < 10,
+            'ni_overuse_control': dysfunction_scores.get('Ni_overuse', 0) < 0.7,
+            'se_grip_control': dysfunction_scores.get('Se_inferior_grip', 0) < 0.6,
+            'shadow_activation_control': sum([
+                dysfunction_scores.get('Ne_shadow', 0),
+                dysfunction_scores.get('Ti_shadow', 0),
+                dysfunction_scores.get('Fe_shadow', 0),
+                dysfunction_scores.get('Si_shadow', 0)
+            ]) / 4 < 0.5
         }
         
-        # 総合スコア
-        total_score = sum(1 for v in indicators.values() if v)
+        # PATH相互作用の健全性
+        path_health = self._evaluate_path_interactions(state)
         
-        # 重症度判定
-        if total_score <= 2:
+        # ネットワーク効果
+        network_health = self._evaluate_social_network(state)
+        
+        # 総合スコア
+        basic_score = sum(1 for v in indicators.values() if v)
+        interaction_score = path_health['score']
+        network_score = network_health['score']
+        
+        total_score = basic_score + interaction_score + network_score
+        
+        # 重症度判定（より細かい基準）
+        if total_score <= 4:
             severity = "severe"
-        elif total_score <= 4:
+            interpretation = "重度の機能不全・緊急介入必要"
+        elif total_score <= 7:
+            severity = "moderate-severe"
+            interpretation = "中等度から重度の機能不全"
+        elif total_score <= 10:
             severity = "moderate"
-        else:
+            interpretation = "中等度の機能不全"
+        elif total_score <= 12:
             severity = "mild"
+            interpretation = "軽度の機能不全"
+        else:
+            severity = "healthy"
+            interpretation = "健康的な状態"
+        
+        # 主要な問題の特定
+        primary_issues = []
+        if dysfunction_scores.get('Ni_overuse', 0) > 0.6:
+            primary_issues.append("Ni過剰使用による現実逃避")
+        if dysfunction_scores.get('Se_inferior_grip', 0) > 0.5:
+            primary_issues.append("Se劣等機能の暴走")
+        if not indicators['metacognitive_function']:
+            primary_issues.append("メタ認知の著しい低下")
+        if dysfunction_scores.get('general_imbalance', 0) > 0.7:
+            primary_issues.append("全体的な心理的不均衡")
+        if not indicators['shadow_activation_control']:
+            primary_issues.append("シャドウ機能の活性化による人格の分裂傾向")
+        
+        # 応用効果
+        self.apply_dysfunction_effects(state, dysfunction_scores)
+        
+        # 動的効果の適用
+        self.apply_enhanced_dynamics(state, responses)
         
         return {
             'severity': severity,
+            'interpretation': interpretation,
             'total_score': total_score,
-            'max_score': len(indicators),
+            'max_score': 16,  # 基本11 + PATH相互作用3 + ネットワーク2
             'indicators': indicators,
             'dysfunction_scores': dysfunction_scores,
-            'recommendations': []
+            'path_health': path_health,
+            'network_health': network_health,
+            'pulsation_analysis': self._analyze_pulsations(state),
+            'primary_issues': primary_issues,
+            'recommendations': self._generate_recommendations(state, severity, dysfunction_scores)
         }
     
     def calculate_dysfunction_scores(self, responses: Dict[str, int]) -> Dict:
-        """回答から機能不全スコアを計算（簡略版）"""
-        scores = {}
+        """回答から機能不全スコアを計算（フルバージョン）"""
         
-        # Ni過剰使用
-        if 'ni_1' in responses:
-            scores['Ni_overuse'] = (responses['ni_1'] - 1) / 4
+        questions = self.generate_enhanced_questions()
         
-        # Te機能不全
-        if 'te_1' in responses:
-            scores['Te_dysfunction'] = (responses['te_1'] - 1) / 4
+        # PATHごとのスコア集計
+        path_scores = {
+            'Ni': {'overuse': 0, 'isolation': 0, 'total_weight': 0},
+            'Te': {'dysfunction': 0, 'suppression': 0, 'total_weight': 0},
+            'Fi': {'eruption': 0, 'rigidity': 0, 'total_weight': 0},
+            'Se': {'inferior_grip': 0, 'somatic': 0, 'total_weight': 0},
+            'Ne': {'shadow': 0, 'total_weight': 0},
+            'Ti': {'shadow': 0, 'total_weight': 0},
+            'Fe': {'shadow': 0, 'total_weight': 0},
+            'Si': {'shadow': 0, 'total_weight': 0},
+            'general': {'imbalance': 0, 'total_weight': 0},
+            'physical': {'dysfunction': 0, 'total_weight': 0}
+        }
         
-        # Se劣等機能
-        if 'se_1' in responses:
-            scores['Se_inferior_grip'] = (responses['se_1'] - 1) / 4
+        # 各質問カテゴリのスコア計算
+        for category, question_list in questions.items():
+            # イベントベース質問はスキップ（別途処理）
+            if category in ['pulsation_events', 'path_conflicts', 
+                           'metacognition_noise', 'critical_events']:
+                continue
+                
+            for q in question_list:
+                if q['id'] in responses:
+                    score = responses[q['id']]
+                    weighted_score = (score - 1) / 4 * q['weight']  # 0-1に正規化
+                    
+                    path = q['path']
+                    pattern = q['pattern']
+                    
+                    if path in path_scores:
+                        if pattern in ['overuse', 'dysfunction', 'eruption', 'inferior_grip', 
+                                      'isolation', 'suppression', 'rigidity', 'somatic']:
+                            path_scores[path][pattern] = path_scores[path].get(pattern, 0) + weighted_score
+                        elif pattern.startswith('shadow'):
+                            path_scores[path]['shadow'] = path_scores[path].get('shadow', 0) + weighted_score
+                        elif pattern in ['sleep_deprivation', 'sleep_quality', 'meal_irregularity', 'eating_disorder']:
+                            path_scores[path]['dysfunction'] = path_scores[path].get('dysfunction', 0) + weighted_score
+                        elif pattern in ['dissociation', 'regression']:
+                            if path == 'general':
+                                path_scores[path]['imbalance'] = path_scores[path].get('imbalance', 0) + weighted_score
+                        
+                        path_scores[path]['total_weight'] += q['weight']
         
-        return scores
+        # 正規化
+        normalized_scores = {}
+        for path, scores in path_scores.items():
+            if scores['total_weight'] > 0:
+                for pattern, value in scores.items():
+                    if pattern != 'total_weight':
+                        normalized_scores[f'{path}_{pattern}'] = value / scores['total_weight']
+        
+        return normalized_scores
+    
+    def apply_dysfunction_effects(self, state: IntegratedDynamicLambda3State,
+                                dysfunction_scores: Dict[str, float]) -> None:
+        """機能不全スコアに基づく状態への影響適用"""
+        
+        # Ni過剰使用の影響
+        if 'Ni_overuse' in dysfunction_scores:
+            ni_overuse = dysfunction_scores['Ni_overuse']
+            if ni_overuse > 0.7:
+                state.path_preferences['Ni'] = PathPreference.DEPENDENT
+                state.perception_noise += ni_overuse * 0.3
+                state.Λ_self_aspects['ideal'] = min(0.95, state.Λ_self_aspects['ideal'] + ni_overuse * 0.1)
+        
+        # Te機能不全の影響
+        if 'Te_dysfunction' in dysfunction_scores:
+            te_dysfunction = dysfunction_scores['Te_dysfunction']
+            if te_dysfunction > 0.6:
+                state.path_preferences['Te'] = PathPreference.RELUCTANT
+                state.Λ_self_aspects['core'] *= (1 - te_dysfunction * 0.2)
+                state.Λ_self_aspects['social'] *= (1 - te_dysfunction * 0.1)
+        
+        # Fi爆発の影響
+        if 'Fi_eruption' in dysfunction_scores:
+            fi_eruption = dysfunction_scores['Fi_eruption']
+            if fi_eruption > 0.5:
+                state.path_preferences['Fi'] = PathPreference.PREFERRED
+                state.emotional_state.anger += fi_eruption * 0.3
+                state.emotional_state.sadness += fi_eruption * 0.2
+        
+        # Se劣等機能の暴走
+        if 'Se_inferior_grip' in dysfunction_scores:
+            se_grip = dysfunction_scores['Se_inferior_grip']
+            if se_grip > 0.5:
+                state.path_preferences['Se'] = PathPreference.AVOIDED
+                state.Λ_self_aspects['shadow'] = min(0.8, 
+                    state.Λ_self_aspects['shadow'] + se_grip * 0.3)
+                state.σs *= (1 - se_grip * 0.3)
+                state.ρT = min(0.95, state.ρT + se_grip * 0.4)
+                state.Λ_bod *= (1 - se_grip * 0.2)
+        
+        # 全体的な不均衡
+        if 'general_imbalance' in dysfunction_scores:
+            imbalance = dysfunction_scores['general_imbalance']
+            if imbalance > 0.6:
+                state.metacognition *= (1 - imbalance * 0.3)
+                for path in ['Ni', 'Te', 'Fi', 'Se']:
+                    state.path_trauma_count[path] += int(imbalance * 5)
+        
+        # シャドウ機能の影響
+        shadow_scores = {
+            'Ne': dysfunction_scores.get('Ne_shadow', 0),
+            'Ti': dysfunction_scores.get('Ti_shadow', 0),
+            'Fe': dysfunction_scores.get('Fe_shadow', 0),
+            'Si': dysfunction_scores.get('Si_shadow', 0)
+        }
+        
+        total_shadow_activation = sum(shadow_scores.values()) / 4
+        
+        if total_shadow_activation > 0.5:
+            state.Λ_self_aspects['shadow'] = min(0.9, 
+                state.Λ_self_aspects['shadow'] + total_shadow_activation * 0.4)
+            state.perception_noise += total_shadow_activation * 0.2
+            
+            # 各シャドウ機能の特異的影響
+            if shadow_scores['Ne'] > 0.6:
+                state.path_preferences['Ne'] = PathPreference.DEPENDENT
+                state.ρT = min(0.95, state.ρT + 0.3)
+                
+            if shadow_scores['Ti'] > 0.6:
+                state.path_preferences['Ti'] = PathPreference.PREFERRED
+                state.σs *= 0.7
+                
+            if shadow_scores['Fe'] > 0.6:
+                state.path_preferences['Fe'] = PathPreference.DEPENDENT
+                state.Λ_self_aspects['social'] *= 0.8
+                
+            if shadow_scores['Si'] > 0.6:
+                state.path_preferences['Si'] = PathPreference.PREFERRED
+                state.Λ_bod *= 0.8
+        
+        # 身体的要因の処理
+        if 'physical_dysfunction' in dysfunction_scores:
+            physical_dysfunction = dysfunction_scores['physical_dysfunction']
+            if physical_dysfunction > 0.5:
+                state.Λ_bod *= (1 - physical_dysfunction * 0.3)
+                state.perception_noise += physical_dysfunction * 0.1
+                state.metacognition *= (1 - physical_dysfunction * 0.1)
+                
+                # 重度の身体的不調は発達段階にも影響
+                if physical_dysfunction > 0.7:
+                    state.developmental_stage = DevelopmentalStage.CRISIS
+    
+    def apply_enhanced_dynamics(self, state: IntegratedDynamicLambda3State, 
+                               responses: Dict[str, int]) -> None:
+        """拡張された動的効果の適用"""
+        
+        # Pulsationイベントの生成
+        if responses.get('pulse_1', 0) >= 4:
+            # 高頻度の拍動
+            for _ in range(3):
+                state.trigger_pulsation('emotional_overflow')
+                
+        # PATH葛藤の処理
+        if responses.get('conflict_1', 0) >= 4:
+            # Te-Fi葛藤
+            state.path_interaction.set_interaction('Te', 'Fi', -0.6)
+            state.perception_noise += 0.1
+            
+        if responses.get('conflict_2', 0) >= 4:
+            # Ni-Se葛藤
+            state.path_interaction.set_interaction('Ni', 'Se', -0.8)
+            state.ρT += 0.2
+        
+        # メタ認知とノイズ
+        if responses.get('meta_1', 0) >= 4:
+            state.metacognition *= 0.7
+        if responses.get('meta_2', 0) >= 4:
+            state.perception_noise += 0.2
+        
+        # 重大イベントの処理
+        if responses.get('event_1', 0) >= 4:
+            event = Event(
+                event_type='loss',
+                impact=-0.8,
+                uncertainty=0.3,
+                duration=responses.get('event_2', 3) * 10
+            )
+            state.process_event(event)
+    
+    def _evaluate_path_interactions(self, state: IntegratedDynamicLambda3State) -> Dict:
+        """PATH相互作用の健全性評価"""
+        conflicts = 0
+        synergies = 0
+        
+        for (path1, path2), strength in state.path_interaction.resonance_factors.items():
+            if strength < -0.5:
+                conflicts += 1
+            elif strength > 0.5:
+                synergies += 1
+        
+        score = max(0, 3 - conflicts + synergies // 2)
+        
+        return {
+            'score': min(score, 3),
+            'conflicts': conflicts,
+            'synergies': synergies
+        }
+    
+    def _evaluate_social_network(self, state: IntegratedDynamicLambda3State) -> Dict:
+        """社会的ネットワークの健全性評価"""
+        if not state.social_network:
+            return {'score': 1, 'sources': 0, 'balance': 0}
+        
+        positive_count = 0
+        negative_count = 0
+        
+        for feedbacks in state.social_network.values():
+            for fb in feedbacks:
+                if fb.valence > 0:
+                    positive_count += 1
+                else:
+                    negative_count += 1
+        
+        balance = positive_count / (positive_count + negative_count + 1)
+        score = 2 if 0.3 < balance < 0.7 else 1
+        
+        return {
+            'score': score,
+            'sources': len(state.social_network),
+            'balance': balance
+        }
+    
+    def _analyze_pulsations(self, state: IntegratedDynamicLambda3State) -> Dict:
+        """拍動パターンの分析"""
+        if not state.pulsation_history:
+            return {'frequency': 0, 'average_intensity': 0, 'pattern': 'none'}
+        
+        recent_pulsations = state.pulsation_history[-10:]
+        frequency = len(recent_pulsations)
+        avg_intensity = np.mean([p.intensity for p in recent_pulsations])
+        
+        if frequency > 7:
+            pattern = 'hyperactive'
+        elif frequency > 4:
+            pattern = 'active'
+        elif frequency > 1:
+            pattern = 'moderate'
+        else:
+            pattern = 'suppressed'
+        
+        return {
+            'frequency': frequency,
+            'average_intensity': avg_intensity,
+            'pattern': pattern
+        }
+    
+    def _generate_recommendations(self, state: IntegratedDynamicLambda3State, 
+                                severity: str, 
+                                dysfunction_scores: Dict[str, float]) -> List[str]:
+        """動的状態と機能不全スコアに基づく推奨事項"""
+        recommendations = []
+        
+        # 基本推奨
+        if severity in ["severe", "moderate-severe"]:
+            recommendations.append("専門家（精神科医・心理士）への相談を強く推奨")
+        
+        # Ni過剰使用への対処
+        if dysfunction_scores.get('Ni_overuse', 0) > 0.6:
+            recommendations.append("具体的な行動計画の作成と実行（小さなステップから）")
+            recommendations.append("現実的な目標設定の練習")
+        
+        # Se劣等機能暴走への対処
+        if dysfunction_scores.get('Se_inferior_grip', 0) > 0.5:
+            recommendations.append("健全な感覚体験の構造化（運動、自然散策など）")
+            recommendations.append("衝動的行動の前に一時停止する練習")
+        
+        # PATH相互作用に基づく推奨
+        if state.path_interaction.resonance_factors.get(('Ni', 'Se'), 0) < -0.7:
+            recommendations.append("Ni-Se統合のための身体的グラウンディング練習")
+            recommendations.append("マインドフルネスや瞑想での現在への注目")
+        
+        # メタ認知に基づく推奨
+        if state.metacognition < 0.4:
+            recommendations.append("日記や内省による自己観察力の回復")
+            recommendations.append("認知行動療法的アプローチの検討")
+        
+        # シャドウ機能への対処
+        shadow_activation = sum([
+            dysfunction_scores.get('Ne_shadow', 0),
+            dysfunction_scores.get('Ti_shadow', 0),
+            dysfunction_scores.get('Fe_shadow', 0),
+            dysfunction_scores.get('Si_shadow', 0)
+        ]) / 4
+        
+        if shadow_activation > 0.5:
+            recommendations.append("シャドウワーク：抑圧された側面との対話")
+            recommendations.append("夢分析やアクティブイマジネーション")
+            recommendations.append("統合的な心理療法（ユング派分析など）の検討")
+        
+        # 社会的ネットワークに基づく推奨
+        if len(state.social_network) < 2:
+            recommendations.append("信頼できる支援者との関係構築")
+        
+        # 拍動パターンに基づく推奨
+        pulsation_analysis = self._analyze_pulsations(state)
+        if pulsation_analysis['pattern'] == 'hyperactive':
+            recommendations.append("感情調整スキルの学習（DBTなど）")
+            recommendations.append("定期的な休息と回復時間の確保")
+        elif pulsation_analysis['pattern'] == 'suppressed':
+            recommendations.append("感情表現の安全な練習")
+            recommendations.append("身体感覚への注目（ボディスキャン等）")
+        
+        # 身体的要因への対処
+        if dysfunction_scores.get('physical_dysfunction', 0) > 0.5:
+            recommendations.append("睡眠衛生の改善（7-8時間の確保）")
+            recommendations.append("規則正しい食事リズムの確立")
+            recommendations.append("血糖値の安定化（タンパク質を含む朝食）")
+        
+        # 身体状態の低下への対処
+        if state.Λ_bod < 0.5:
+            recommendations.append("軽い運動習慣の導入（ウォーキング、ヨガなど）")
+            recommendations.append("自然との接触時間を増やす")
+        
+        return recommendations
     
     def _perform_integrated_advanced_analysis(self, 
                                             state: IntegratedDynamicLambda3State,
