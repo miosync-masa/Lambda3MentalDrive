@@ -10,12 +10,13 @@ from social_tensor_extension import (
     MultidimensionalSocialSelf, EnhancedSocialDynamics,
     MultidimensionalSocialAssessment
 )
-# レジーム粘性テンソル拡張のインポート（追加）
+# レジーム粘性テンソル拡張のインポート
 from viscosity_tensor_extension import (
     IntegratedViscositySystem,
     RegimeViscosity,
     ViscosityCalculator,
-    ViscosityInterventions
+    ViscosityInterventions,
+    ViscosityPattern
 )
 
 # ユング8機能ベースPATH
@@ -170,6 +171,12 @@ class Lambda3ManifoldAnalyzer:
         # 局所的な曲率を計算（Shadow活性化時は空間が歪む）
         curvature = self._calculate_local_curvature(state, dysfunction_scores)
         
+        # 粘性による追加の曲率（新規追加）
+        if hasattr(state, 'regime_viscosity'):
+            viscosity_calc = ViscosityCalculator(state.regime_viscosity)
+            current_viscosity, _ = viscosity_calc.calculate_current_viscosity(state)
+            curvature += current_viscosity * 0.2  # 高粘性は空間を歪める
+        
         # 近傍のアトラクターを特定
         nearby_attractors = self._identify_nearby_attractors(current_point)
         
@@ -235,20 +242,27 @@ class Lambda3ManifoldAnalyzer:
         return 0.1 + shadow_activation * 0.5 + conflict_curvature
     
     def _calculate_geodesic_distance(self, point1: np.ndarray, 
-                                   point2: np.ndarray, 
-                                   curvature: float) -> float:
-        """測地線距離の計算（簡略化版）"""
-        # ユークリッド距離
-        euclidean = np.linalg.norm(point2 - point1)
+                                 point2: np.ndarray, 
+                                 curvature: float) -> float:
+        """測地線距離の計算"""
+        # PATH次元での差分ベクトル
+        diff = point2[:8] - point1[:8]
         
-        # 曲率による補正（曲率が高いほど実際の距離は長い）
-        geodesic = euclidean * (1 + curvature)
+        # メトリックテンソルで重み付けた距離を最初に計算
+        metric_distance = np.sqrt(diff.T @ self.metric_tensor @ diff)
         
-        # メトリックテンソルによる重み付け
-        diff = point2[:8] - point1[:8]  # PATH次元のみ
-        weighted_dist = np.sqrt(diff.T @ self.metric_tensor @ diff)
+        # 残りの次元（感情・欲求など）がある場合は通常のユークリッド距離を計算して追加
+        if len(point1) > 8:
+            extra_diff = point2[8:] - point1[8:]
+            extra_distance = np.linalg.norm(extra_diff)
+            total_distance = np.sqrt(metric_distance**2 + extra_distance**2)
+        else:
+            total_distance = metric_distance
         
-        return (geodesic + weighted_dist) / 2
+        # 曲率による補正
+        geodesic_distance = total_distance * (1 + curvature)
+        
+        return geodesic_distance
     
     def _define_healthy_state_coordinates(self) -> np.ndarray:
         """健全状態の座標を定義（INTJ用）"""
@@ -402,6 +416,15 @@ class AttractorBasinAnalyzer:
                     basin_depth=0.7,
                     stability_index=0.5,  # 不安定
                     attractor_type="pathological"
+                ),
+                # 粘性に関連するアトラクター（新規追加）
+                AttractorBasin(
+                    name="viscous_trap",
+                    center=np.array([0.8, 0.1, 0.1, 0.8, 0.2, 0.2, 0.1, 0.7]),
+                    radius=0.25,
+                    basin_depth=0.85,
+                    stability_index=0.9,  # 粘性で抜けにくい
+                    attractor_type="pathological"
                 )
             ]
         return []
@@ -412,17 +435,28 @@ class AttractorBasinAnalyzer:
         # 現在状態のベクトル表現
         current_vector = self._state_to_vector(state)
         
+        # 粘性による修正（新規追加）
+        if hasattr(state, 'regime_viscosity'):
+            viscosity_calc = ViscosityCalculator(state.regime_viscosity)
+            current_viscosity, _ = viscosity_calc.calculate_current_viscosity(state)
+            # 高粘性は移動を困難にする
+            movement_resistance = 1 + current_viscosity
+        else:
+            movement_resistance = 1.0
+        
         # 各アトラクターへの距離と引力
         attractor_forces = []
         for attractor in self.attractors:
             distance = np.linalg.norm(current_vector - attractor.center)
             if distance < attractor.radius * 2:  # 影響圏内
-                force = attractor.basin_depth / (distance + 0.1)
+                # 粘性を考慮した実効的な引力
+                effective_force = attractor.basin_depth / (distance + 0.1) / movement_resistance
                 attractor_forces.append({
                     'attractor': attractor,
                     'distance': distance,
-                    'force': force,
-                    'in_basin': distance < attractor.radius
+                    'force': effective_force,
+                    'in_basin': distance < attractor.radius,
+                    'viscosity_modified': movement_resistance > 1.2
                 })
         
         # 最も近い/強いアトラクター
@@ -444,8 +478,9 @@ class AttractorBasinAnalyzer:
             'strongest_attractor': strongest,
             'trajectory_prediction': trajectory,
             'stability_analysis': stability,
-            'escape_difficulty': self._calculate_escape_difficulty(nearest),
-            'phase_portrait': self._generate_phase_portrait(state)
+            'escape_difficulty': self._calculate_escape_difficulty(nearest, movement_resistance),
+            'phase_portrait': self._generate_phase_portrait(state),
+            'viscosity_effect': movement_resistance
         }
     
     def _state_to_vector(self, state) -> np.ndarray:
@@ -468,7 +503,7 @@ class AttractorBasinAnalyzer:
             return {
                 'direction': 'drift', 
                 'target': None, 
-                'target_type': None,  # 追加
+                'target_type': None,
                 'estimated_time': 0,
                 'confidence': 0.1
             }
@@ -478,12 +513,18 @@ class AttractorBasinAnalyzer:
         direction_vector = strongest_force['attractor'].center - current
         direction_vector = direction_vector / (np.linalg.norm(direction_vector) + 0.01)
         
+        # 粘性による時間延長
+        time_factor = 1.0
+        if strongest_force.get('viscosity_modified', False):
+            time_factor = 2.0  # 粘性が高いと到達時間が倍増
+        
         return {
             'direction': 'attracted',
             'target': strongest_force['attractor'].name,
             'target_type': strongest_force['attractor'].attractor_type,
-            'estimated_time': strongest_force['distance'] / 0.1,  # 簡略化
-            'confidence': min(strongest_force['force'] / 10, 1.0)
+            'estimated_time': strongest_force['distance'] / 0.1 * time_factor,
+            'confidence': min(strongest_force['force'] / 10, 1.0),
+            'viscosity_delayed': strongest_force.get('viscosity_modified', False)
         }
     
     def _analyze_stability(self, state, forces: List[Dict]) -> Dict:
@@ -516,15 +557,18 @@ class AttractorBasinAnalyzer:
             return 0.8
         return 0.2
     
-    def _calculate_escape_difficulty(self, nearest: Optional[Dict]) -> float:
-        """脱出難易度"""
+    def _calculate_escape_difficulty(self, nearest: Optional[Dict], 
+                                   movement_resistance: float) -> float:
+        """脱出難易度（粘性を考慮）"""
         if not nearest or not nearest['in_basin']:
             return 0.0
         
         attractor = nearest['attractor']
-        # 深さ × 安定性 × (1 - 健全度)
+        # 深さ × 安定性 × 粘性抵抗 × (1 - 健全度)
+        base_difficulty = attractor.basin_depth * attractor.stability_index
+        
         if attractor.attractor_type == 'pathological':
-            return attractor.basin_depth * attractor.stability_index
+            return base_difficulty * movement_resistance
         return 0.0  # 健全なアトラクターからの脱出は問題ない
     
     def _generate_phase_portrait(self, state) -> Dict:
@@ -653,6 +697,10 @@ class DeviationQualityAnalyzer:
         
         # リソース（Λ_bod）があれば上昇
         potential += state.Λ_bod * 0.1
+        
+        # 粘性が低ければ変化しやすい（新規追加）
+        if hasattr(state, 'regime_viscosity') and attractor_result.get('viscosity_effect', 1.0) < 1.2:
+            potential += 0.1
         
         return np.clip(potential, 0.0, 1.0)
     
@@ -859,6 +907,7 @@ class PulsationEvent:
     trigger_path: str
     emotional_result: str
     tensor_snapshot: Dict[str, float]
+    viscosity_at_pulsation: float = 0.5  # 拍動時の粘性（新規追加）
 
 class DynamicLambda3State:
     """基本的な動的Λ³状態（統合版のベースクラス）"""
@@ -913,21 +962,44 @@ class DynamicLambda3State:
         # ❺ イベントキュー
         self.event_queue: List[Event] = []
         self.active_events: List[Tuple[Event, int]] = []  # (event, remaining_duration)
+        
+        # ❻ レジーム粘性（新規追加）
+        self.regime_viscosity = RegimeViscosity()
+        self.viscosity_history: List[Tuple[int, float]] = []  # (timestamp, viscosity)
     
     def check_pulsation_conditions(self) -> bool:
-        """❷ 拍動条件のチェック"""
-        return (self.Λ_self > 0 and 
-                self.σs < 1.0 and 
-                self.ρT > self.ε_critical and 
-                np.linalg.norm(self.ΛF) > 0)
+        """❷ 拍動条件のチェック（粘性修正版）"""
+        base_conditions = (self.Λ_self > 0 and 
+                          self.σs < 1.0 and 
+                          self.ρT > self.ε_critical and 
+                          np.linalg.norm(self.ΛF) > 0)
+        
+        if not base_conditions:
+            return False
+        
+        # 高粘性時は拍動閾値が上昇（新規追加）
+        viscosity_calc = ViscosityCalculator(self.regime_viscosity)
+        current_viscosity, _ = viscosity_calc.calculate_current_viscosity(self)
+        
+        if current_viscosity > 1.0:
+            # 粘性が高いほど拍動しにくくなる
+            adjusted_threshold = self.ε_critical * (1 + (current_viscosity - 1) * 0.5)
+            return self.ρT > adjusted_threshold
+        
+        return True
     
     def trigger_pulsation(self, trigger_path: Optional[str] = None) -> Optional[PulsationEvent]:
-        """❷ 拍動イベントの生成"""
+        """❷ 拍動イベントの生成（粘性考慮版）"""
         if not self.check_pulsation_conditions():
             return None
         
-        # 拍動強度の計算
-        intensity = self.ρT * self.σs * np.linalg.norm(self.ΛF)
+        # 現在の粘性を取得
+        viscosity_calc = ViscosityCalculator(self.regime_viscosity)
+        current_viscosity, _ = viscosity_calc.calculate_current_viscosity(self)
+        
+        # 拍動強度の計算（粘性により減衰）
+        base_intensity = self.ρT * self.σs * np.linalg.norm(self.ΛF)
+        intensity = base_intensity / (1 + current_viscosity * 0.3)
         
         # 感情結果の決定（簡略化）
         dominant = self.emotional_state.dominant_emotion()
@@ -939,7 +1011,8 @@ class DynamicLambda3State:
             'σs': self.σs,
             'ρT': self.ρT,
             'perception_noise': self.perception_noise,
-            'metacognition': self.metacognition
+            'metacognition': self.metacognition,
+            'viscosity': current_viscosity
         }
         
         event = PulsationEvent(
@@ -947,7 +1020,8 @@ class DynamicLambda3State:
             intensity=intensity,
             trigger_path=trigger_path or "general",
             emotional_result=emotional_result,
-            tensor_snapshot=snapshot
+            tensor_snapshot=snapshot,
+            viscosity_at_pulsation=current_viscosity
         )
         
         self.pulsation_history.append(event)
@@ -958,9 +1032,10 @@ class DynamicLambda3State:
         return event
     
     def _update_state_after_pulsation(self, event: PulsationEvent):
-        """拍動後の状態更新"""
-        # テンション解放
-        self.ρT *= 0.7
+        """拍動後の状態更新（粘性考慮版）"""
+        # テンション解放（粘性が高いと解放が不完全）
+        release_factor = 0.7 / (1 + event.viscosity_at_pulsation * 0.2)
+        self.ρT *= release_factor
         
         # メタ認知への影響
         if event.intensity > 1.0:
@@ -970,11 +1045,24 @@ class DynamicLambda3State:
         if event.emotional_result in ['anger', 'fear']:
             self.Λ_self_aspects['shadow'] = min(0.8, 
                 self.Λ_self_aspects['shadow'] + 0.05)
+        
+        # 粘性パターンの更新（拍動により一時的に粘性低下）
+        if event.viscosity_at_pulsation > 0.8:
+            # 高粘性状態での拍動は粘性を若干低下させる
+            self.regime_viscosity.environmental_factors['recent_event_intensity'] *= 0.8
     
     def update_metacognition_and_noise(self):
-        """❸ 認識ノイズとメタ認知の動的相互作用"""
+        """❸ 認識ノイズとメタ認知の動的相互作用（粘性考慮版）"""
+        # 粘性による追加効果
+        viscosity_calc = ViscosityCalculator(self.regime_viscosity)
+        current_viscosity, _ = viscosity_calc.calculate_current_viscosity(self)
+        
+        # 高粘性はメタ認知を低下させる
+        viscosity_effect = (current_viscosity - 0.5) * 0.05
+        
         # ノイズがメタ認知を妨げる
         self.metacognition -= self.perception_noise * self.noise_metacognition_coupling
+        self.metacognition -= viscosity_effect
         self.metacognition = np.clip(self.metacognition, 0.1, 1.0)
         
         # メタ認知がノイズを抑制
@@ -1052,6 +1140,10 @@ class DynamicLambda3State:
         
         # イベントタイプによる特異的影響
         self._apply_event_specific_effects(event)
+        
+        # 重大イベントは粘性に影響（新規追加）
+        if abs(event.impact) > 0.5:
+            self.regime_viscosity.environmental_factors['recent_event_intensity'] = abs(event.impact)
     
     def _apply_event_specific_effects(self, event: Event):
         """イベントタイプ特有の影響を適用"""
@@ -1066,7 +1158,11 @@ class DynamicLambda3State:
             self.σs -= 0.05
     
     def update_path_states_with_interaction(self):
-        """PATH状態を相互作用を考慮して更新"""
+        """PATH状態を相互作用を考慮して更新（粘性修正版）"""
+        # 現在の粘性を取得
+        viscosity_calc = ViscosityCalculator(self.regime_viscosity)
+        current_viscosity, active_patterns = viscosity_calc.calculate_current_viscosity(self)
+        
         new_states = {}
         
         for path in BASE_PATHS:
@@ -1088,8 +1184,12 @@ class DynamicLambda3State:
             }
             pref_mod = preference_modifier[self.path_preferences[path]]
             
+            # 粘性による変化の減衰（新規追加）
+            change_rate = 1.0 / (1 + current_viscosity * 0.5)
+            
             # 新しい状態の計算
-            new_state = base_state + influence * 0.1 + pref_mod * 0.05
+            target_state = base_state + (influence * 0.1 + pref_mod * 0.05) * change_rate
+            new_state = base_state + (target_state - base_state) * change_rate
             new_states[path] = np.clip(new_state, 0.0, 1.0)
         
         self.path_states = new_states
@@ -1104,6 +1204,12 @@ class DynamicLambda3State:
         # ノイズとメタ認知の相互作用
         self.update_metacognition_and_noise()
         
+        # 粘性の記録（新規追加）
+        if self.time_step % 5 == 0:  # 5ステップごとに記録
+            viscosity_calc = ViscosityCalculator(self.regime_viscosity)
+            current_viscosity, _ = viscosity_calc.calculate_current_viscosity(self)
+            self.viscosity_history.append((self.time_step, current_viscosity))
+        
         # 持続的イベントの処理
         remaining_events = []
         for event, duration in self.active_events:
@@ -1114,8 +1220,12 @@ class DynamicLambda3State:
                 
         self.active_events = remaining_events
         
-        # 拍動チェック
-        if self.check_pulsation_conditions() and random.random() > 0.7:
+        # 拍動チェック（粘性により確率調整）
+        viscosity_calc = ViscosityCalculator(self.regime_viscosity)
+        current_viscosity, _ = viscosity_calc.calculate_current_viscosity(self)
+        pulsation_probability = 0.7 / (1 + current_viscosity * 0.3)
+        
+        if self.check_pulsation_conditions() and random.random() > (1 - pulsation_probability):
             self.trigger_pulsation()
 
 # =========== 新規：Social多領域テンソルを統合したΛ³状態 ===========
@@ -1133,10 +1243,9 @@ class IntegratedDynamicLambda3State(DynamicLambda3State):
         self.social_influence_on_core = 0.0
         self.social_influence_on_shadow = 0.0
         self.social_influence_on_paths = {}
-
-        # レジーム粘性の追加（新規）
-        from viscosity_tensor_extension import RegimeViscosity
-        self.regime_viscosity = RegimeViscosity()
+        
+        # 粘性システムとの統合（既にDynamicLambda3Stateで初期化済み）
+        # self.regime_viscosity は親クラスで初期化される
     
     def update_from_social_domains(self):
         """社会的領域の状態から全体的なΛ³状態を更新"""
@@ -1205,9 +1314,10 @@ class IntegratedSocialMBTIAssessment:
             'INTJ': MBTIProfile('INTJ', 'Ni', 'Te', 'Fi', 'Se')
         }
         self.social_assessment = MultidimensionalSocialAssessment()
+        self.viscosity_system = IntegratedViscositySystem()  # 粘性システムの追加
     
     def generate_integrated_questions(self) -> Dict:
-        """基本質問 + 社会的領域別質問の統合セット"""
+        """基本質問 + 社会的領域別質問 + 粘性質問の統合セット"""
         
         # 既存の拡張質問を取得
         enhanced_questions = self.generate_enhanced_questions()
@@ -1229,8 +1339,22 @@ class IntegratedSocialMBTIAssessment:
                 for q in key_questions
             ]
         
+        # 粘性質問を追加
+        viscosity_questions = {
+            'viscosity': [
+                {
+                    'id': q['id'],
+                    'text': q['text'],
+                    'scale': q['scale'],
+                    'weight': q['weight'],
+                    'type': q['type']
+                }
+                for q in self.viscosity_system.get_viscosity_questions()
+            ]
+        }
+        
         # 統合
-        return {**enhanced_questions, **social_questions}
+        return {**enhanced_questions, **social_questions, **viscosity_questions}
     
     def generate_enhanced_questions(self) -> Dict:
         """拡張版質問セット（イベントベース質問を含む）"""
@@ -1543,6 +1667,11 @@ class IntegratedSocialMBTIAssessment:
                                       responses: Dict[str, int]) -> Dict:
         """統合評価の実行"""
         
+        # 粘性システムの初期化
+        self.viscosity_system.initialize_from_responses(responses)
+        # 状態に粘性情報を設定
+        state.regime_viscosity = self.viscosity_system.regime_viscosity
+        
         # 基本評価を実行
         base_evaluation = self.calculate_enhanced_evaluation(state, responses)
         
@@ -1567,6 +1696,9 @@ class IntegratedSocialMBTIAssessment:
         social_dynamics.social_self = state.social_self
         social_analysis = social_dynamics.generate_detailed_assessment()
         
+        # 粘性分析を実行
+        viscosity_analysis = self.viscosity_system.analyze_and_recommend(state)
+        
         # 統合された高度分析
         integrated_advanced_analysis = self._perform_integrated_advanced_analysis(
             state, base_evaluation.get('dysfunction_scores', {}), social_analysis
@@ -1576,9 +1708,10 @@ class IntegratedSocialMBTIAssessment:
         integrated_evaluation = {
             **base_evaluation,
             'social_analysis': social_analysis,
+            'viscosity_analysis': viscosity_analysis,
             'integrated_advanced_analysis': integrated_advanced_analysis,
             'integrated_recommendations': self._generate_integrated_recommendations(
-                base_evaluation, social_analysis, integrated_advanced_analysis
+                base_evaluation, social_analysis, integrated_advanced_analysis, viscosity_analysis
             )
         }
         
@@ -1904,13 +2037,14 @@ class IntegratedSocialMBTIAssessment:
         }
     
     def _analyze_pulsations(self, state: IntegratedDynamicLambda3State) -> Dict:
-        """拍動パターンの分析"""
+        """拍動パターンの分析（粘性考慮版）"""
         if not state.pulsation_history:
-            return {'frequency': 0, 'average_intensity': 0, 'pattern': 'none'}
+            return {'frequency': 0, 'average_intensity': 0, 'pattern': 'none', 'viscosity_suppression': False}
         
         recent_pulsations = state.pulsation_history[-10:]
         frequency = len(recent_pulsations)
         avg_intensity = np.mean([p.intensity for p in recent_pulsations])
+        avg_viscosity = np.mean([p.viscosity_at_pulsation for p in recent_pulsations])
         
         if frequency > 7:
             pattern = 'hyperactive'
@@ -1921,10 +2055,15 @@ class IntegratedSocialMBTIAssessment:
         else:
             pattern = 'suppressed'
         
+        # 高粘性による抑制の判定
+        viscosity_suppression = avg_viscosity > 1.0 and frequency < 3
+        
         return {
             'frequency': frequency,
             'average_intensity': avg_intensity,
-            'pattern': pattern
+            'pattern': pattern,
+            'average_viscosity': avg_viscosity,
+            'viscosity_suppression': viscosity_suppression
         }
     
     def _generate_recommendations(self, state: IntegratedDynamicLambda3State, 
@@ -1980,8 +2119,11 @@ class IntegratedSocialMBTIAssessment:
             recommendations.append("感情調整スキルの学習（DBTなど）")
             recommendations.append("定期的な休息と回復時間の確保")
         elif pulsation_analysis['pattern'] == 'suppressed':
-            recommendations.append("感情表現の安全な練習")
-            recommendations.append("身体感覚への注目（ボディスキャン等）")
+            if pulsation_analysis.get('viscosity_suppression', False):
+                recommendations.append("高粘性状態の解消が優先（運動・身体ワーク）")
+            else:
+                recommendations.append("感情表現の安全な練習")
+                recommendations.append("身体感覚への注目（ボディスキャン等）")
         
         # 身体的要因への対処
         if dysfunction_scores.get('physical_dysfunction', 0) > 0.5:
@@ -2159,12 +2301,20 @@ class IntegratedSocialMBTIAssessment:
         return patterns
     
     def _generate_integrated_recommendations(self, base_eval, social_analysis, 
-                                          integrated_analysis) -> List[str]:
-        """統合的な推奨事項の生成"""
+                                          integrated_analysis, viscosity_analysis) -> List[str]:
+        """統合的な推奨事項の生成（粘性考慮版）"""
         recommendations = []
         
         # 基本推奨を含める
         recommendations.extend(base_eval.get('recommendations', []))
+        
+        # 粘性に基づく最優先介入
+        if viscosity_analysis['diagnosis']['viscosity_value'] > 1.0:
+            recommendations.insert(0, "\n【高粘性状態への緊急介入】")
+            if viscosity_analysis['recommendations']['immediate_actions']:
+                for action in viscosity_analysis['recommendations']['immediate_actions'][:2]:
+                    intervention = action['intervention']
+                    recommendations.insert(1, f"◆ {intervention.description}")
         
         # 社会的領域特有の推奨
         if social_analysis['intervention_map']['immediate_priorities']:
@@ -2190,6 +2340,15 @@ class IntegratedSocialMBTIAssessment:
                 resource = social_analysis['energy_distribution']['resources'][0]['domain']
                 recommendations.append(f"・{resource}でのエネルギー充電時間を確保")
         
+        # 粘性パターン特有の介入
+        if viscosity_analysis['diagnosis']['active_patterns']:
+            recommendations.append("\n【粘性パターンへの対処】")
+            for pattern in viscosity_analysis['diagnosis']['active_patterns'][:2]:
+                if pattern['id'] == 'ni_shadow_rumination':
+                    recommendations.append("・内的反芻から抜け出すための身体的グラウンディング")
+                elif pattern['id'] == 'si_trauma_loop':
+                    recommendations.append("・過去のトラウマループから現在への意識転換練習")
+        
         return recommendations
 
 # =========== デモンストレーション関数 ===========
@@ -2197,14 +2356,13 @@ class IntegratedSocialMBTIAssessment:
 def demonstrate_integrated_system():
     """統合システムのデモンストレーション"""
     
-    print("=== 統合版Λ³評価システム（Social多領域テンソル統合） ===\n")
+    print("=== 統合版Λ³評価システム（粘性テンソル完全統合） ===\n")
     
     # 統合状態の初期化
     state = IntegratedDynamicLambda3State()
     assessor = IntegratedSocialMBTIAssessment()
-    viscosity_system = IntegratedViscositySystem()
     
-    # サンプル回答（基本 + 社会的領域）
+    # サンプル回答（基本 + 社会的領域 + 粘性）
     sample_responses = {
         # Ni（主機能）の過剰使用
         'ni_1': 4,      # 将来の悪い結果ばかり想像
@@ -2302,25 +2460,19 @@ def demonstrate_integrated_system():
         'online_authenticity_1': 2, # あまり本来の自分でない
         'online_safety_1': 2,       # あまり安全でない
         
-         # 粘性体質質問（追加）
+        # 粘性体質質問
         'visc_1': 4,  # 2-3日引きずる
         'visc_2': 4,  # よく気分が台無しになる
         'visc_3': 4,  # 切り替えがとても難しい
         'visc_4': 4,  # 翌日まで怒りが続く
         'visc_5': 5,  # 毎日のように過去が蘇る
     }
-
-    # 粘性システムの初期化（追加）
-    viscosity_system.initialize_from_responses(sample_responses)
     
     # 統合評価の実行
     evaluation = assessor.calculate_integrated_evaluation(state, sample_responses)
     
     # 評価結果を反映してPATH状態を更新
     state.update_path_states_with_interaction()
-    
-    # 粘性分析の実行（更新された状態で）
-    viscosity_analysis = viscosity_system.analyze_and_recommend(state)
     
     # 時間ステップを進めて動的な変化を反映
     for _ in range(3):  # 数ステップ進める
@@ -2330,16 +2482,39 @@ def demonstrate_integrated_system():
     print("【基本評価結果】")
     print(f"重症度: {evaluation['severity']}")
     print(f"総合スコア: {evaluation['total_score']}/{evaluation['max_score']}")
+    print(f"解釈: {evaluation['interpretation']}")
+    
+    print("\n【主要な問題】")
+    for issue in evaluation['primary_issues']:
+        print(f"・{issue}")
     
     print("\n【社会的領域分析】")
     social = evaluation['social_analysis']
     print(f"全体的な社会的健康度: {social['overall_social_health']:.2f}")
     print(f"エネルギー源: {[r['domain'] for r in social['energy_distribution']['resources']]}")
     print(f"エネルギードレイン: {[d['domain'] for d in social['energy_distribution']['drains']]}")
+    print(f"持続可能性: {'可能' if social['energy_distribution']['is_sustainable'] else '不可能'}")
     
     print("\n【孤立パターン】")
     for isolation in social['isolation_patterns']:
         print(f"・{isolation['domain']}: スコア {isolation['isolation_score']:.2f}")
+    
+    print("\n【粘性分析】")
+    v_diagnosis = evaluation['viscosity_analysis']['diagnosis']
+    v_metrics = evaluation['viscosity_analysis']['viscosity_metrics']
+    print(f"基準粘性（ν₀）: {v_metrics['base']:.2f}")
+    print(f"現在の総合粘性: {v_diagnosis['viscosity_value']:.2f}")
+    print(f"粘性レベル: {v_diagnosis['description']}")
+    
+    if v_diagnosis['active_patterns']:
+        print("\n活性化している高粘性パターン:")
+        for pattern in v_diagnosis['active_patterns']:
+            print(f"・{pattern['description']} (+{pattern['contribution']:.2f})")
+    
+    if v_diagnosis['primary_factors']:
+        print("\n粘性の主要因:")
+        for factor in v_diagnosis['primary_factors']:
+            print(f"・{factor}")
     
     print("\n【統合的高度分析】")
     integrated = evaluation['integrated_advanced_analysis']
@@ -2357,36 +2532,109 @@ def demonstrate_integrated_system():
         for pattern in integrated['cross_domain_patterns']:
             print(f"・{pattern['description']}")
     
-    print("\n【統合的推奨事項】")
-    for i, rec in enumerate(evaluation['integrated_recommendations'][:10], 1):
-        print(f"{i}. {rec}")
+    print("\n【拍動分析】")
+    pulsation = evaluation['pulsation_analysis']
+    print(f"拍動頻度: {pulsation['frequency']}/10ステップ")
+    print(f"平均強度: {pulsation['average_intensity']:.2f}")
+    print(f"パターン: {pulsation['pattern']}")
+    if pulsation.get('viscosity_suppression', False):
+        print("※高粘性による拍動抑制が検出されました")
     
-    # 粘性分析結果の表示（追加）
-    print("\n【レジーム粘性分析】")
-    v_diagnosis = viscosity_analysis['diagnosis']
-    print(f"基準粘性（ν₀）: {viscosity_analysis['viscosity_metrics']['base']:.2f}")
-    print(f"現在の総合粘性: {v_diagnosis['viscosity_value']:.2f}")
-    print(f"粘性レベル: {v_diagnosis['description']}")
+    print("\n【統合的推奨事項（優先順）】")
+    for i, rec in enumerate(evaluation['integrated_recommendations'][:15], 1):
+        if rec.startswith("\n【"):
+            print(rec)
+        else:
+            print(f"{i}. {rec}")
     
-    if v_diagnosis['active_patterns']:
-        print("\n活性化している高粘性パターン:")
-        for pattern in v_diagnosis['active_patterns']:
-            print(f"・{pattern['description']} (+{pattern['contribution']:.2f})")
+    # 粘性介入の効果予測
+    v_recommendations = evaluation['viscosity_analysis']['recommendations']
+    if v_recommendations['expected_total_reduction'] > 0:
+        print(f"\n【介入効果の見込み】")
+        print(f"現在の粘性: {v_diagnosis['viscosity_value']:.2f}")
+        predicted_viscosity = v_diagnosis['viscosity_value'] - v_recommendations['expected_total_reduction']
+        print(f"介入後の予測粘性: {predicted_viscosity:.2f}")
+        print(f"（{v_recommendations['expected_total_reduction']:.2f}ポイントの低下）")
     
-    # 粘性を考慮した統合的推奨（追加）
-    print("\n【粘性を考慮した介入優先度】")
-    v_recommendations = viscosity_analysis['recommendations']
-    if v_recommendations['immediate_actions']:
-        for action in v_recommendations['immediate_actions']:
-            intervention = action['intervention']
-            print(f"◆ {intervention.description}")
-            print(f"  → 期待される粘性低下: -{intervention.expected_viscosity_reduction:.2f}")
+    # 状態の時系列変化（粘性履歴）
+    if state.viscosity_history:
+        print("\n【粘性の時系列変化】")
+        for timestamp, viscosity in state.viscosity_history[-5:]:
+            print(f"  ステップ{timestamp}: 粘性 {viscosity:.2f}")
     
-    # 統合結果に粘性分析を追加
-    evaluation['viscosity_analysis'] = viscosity_analysis
+    # 現在のPATH状態の表示
+    print("\n【現在のPATH活性度】")
+    print("主機能群:")
+    for path in ['Ni', 'Te', 'Fi', 'Se']:
+        pref = state.path_preferences[path].value
+        print(f"  {path}: {state.path_states[path]:.2f} (嗜好: {pref})")
+    print("Shadow機能群:")
+    for path in ['Ne', 'Ti', 'Fe', 'Si']:
+        pref = state.path_preferences[path].value
+        print(f"  {path}: {state.path_states[path]:.2f} (嗜好: {pref})")
+    
+    # 自己側面の状態
+    print("\n【自己側面の状態】")
+    for aspect, value in state.Λ_self_aspects.items():
+        print(f"  {aspect}: {value:.2f}")
+    
+    # 基本テンソルの状態
+    print("\n【基本Λ³テンソル】")
+    print(f"  Λ_self: {state.Λ_self:.2f}")
+    print(f"  σs (同期率): {state.σs:.2f}")
+    print(f"  ρT (テンション): {state.ρT:.2f}")
+    print(f"  ||ΛF|| (方向性): {np.linalg.norm(state.ΛF):.2f}")
+    print(f"  Λ_bod (身体): {state.Λ_bod:.2f}")
+    
+    # メタ状態
+    print("\n【メタ状態】")
+    print(f"  メタ認知: {state.metacognition:.2f}")
+    print(f"  知覚ノイズ: {state.perception_noise:.2f}")
+    print(f"  発達段階: {state.developmental_stage.value}")
+    
+    # 最も重要な介入ポイントの強調
+    print("\n" + "="*50)
+    print("【最重要介入ポイント】")
+    
+    # 粘性が最優先の場合
+    if v_diagnosis['viscosity_value'] > 1.2:
+        print("\n◆ 超高粘性状態の解消が最優先")
+        print("  現在、状態変化が極めて困難な超高粘性状態にあります。")
+        print("  他の介入を効果的にするため、まず粘性を低下させる必要があります。")
+        if v_recommendations['immediate_actions']:
+            action = v_recommendations['immediate_actions'][0]
+            print(f"  → 推奨: {action['intervention'].description}")
+    
+    # エネルギー枯渇の場合
+    elif not social['energy_distribution']['is_sustainable']:
+        print("\n◆ エネルギー管理の再構築が最優先")
+        print("  社会的エネルギーが持続不可能な状態です。")
+        drains = [d['domain'] for d in social['energy_distribution']['drains']]
+        print(f"  → ドレイン領域（{', '.join(drains)}）での境界設定")
+        if social['energy_distribution']['resources']:
+            resource = social['energy_distribution']['resources'][0]['domain']
+            print(f"  → {resource}でのエネルギー充電時間の確保")
+    
+    # Shadow圧倒の場合
+    elif state.Λ_self_aspects['shadow'] > state.Λ_self_aspects['core']:
+        print("\n◆ Shadow統合が最優先")
+        print("  Shadow側面がCore自己を上回っています。")
+        print("  → 専門家によるShadowワークの開始")
+        print("  → 創造的表現による昇華")
+    
+    print("\n" + "="*50)
     
     return state, evaluation
 
 # 実行
 if __name__ == "__main__":
+    print("Λ³理論に基づく統合的心理動力学評価システム")
+    print("（粘性テンソル・社会的多領域・高度分析完全統合版）\n")
+    
     state, evaluation = demonstrate_integrated_system()
+    
+    print("\n【システム情報】")
+    print(f"総質問数: {len(evaluation.get('all_questions', {}))}項目")
+    print(f"評価次元: PATH×自己側面×社会領域×粘性パターン")
+    print(f"時間モデル: Λ³トランザクションベース（非時間依存）")
+    print("\n評価完了。")
