@@ -1,10 +1,17 @@
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 import random
 
-# =========== 既存のコードから必要な部分をインポート ===========
+# 必要なインポート（social_tensor_extensionから）
+from social_tensor_extension import (
+    SocialDomain, DomainSpecificSocialState, 
+    MultidimensionalSocialSelf, EnhancedSocialDynamics,
+    MultidimensionalSocialAssessment
+)
+
+# =========== 既存のコードから必要な部分 ===========
 
 # ユング8機能ベースPATH
 BASE_PATHS = ['Ne', 'Ni', 'Te', 'Ti', 'Fe', 'Fi', 'Se', 'Si']
@@ -86,7 +93,7 @@ class Event:
     uncertainty: float
     duration: int
 
-# =========== 新規追加：高度分析機能 ===========
+# =========== 高度分析機能（既存） ===========
 
 @dataclass
 class IdealMBTIProfile:
@@ -148,7 +155,7 @@ class Lambda3ManifoldAnalyzer:
         
         return g
     
-    def analyze(self, state: 'DynamicLambda3State', 
+    def analyze(self, state: 'IntegratedDynamicLambda3State', 
                 dysfunction_scores: Dict[str, float]) -> Dict:
         """マニフォールド解析の実行"""
         
@@ -394,7 +401,7 @@ class AttractorBasinAnalyzer:
             ]
         return []
     
-    def analyze(self, state: 'DynamicLambda3State') -> Dict:
+    def analyze(self, state: 'IntegratedDynamicLambda3State') -> Dict:
         """アトラクター解析の実行"""
         
         # 現在状態のベクトル表現
@@ -545,7 +552,7 @@ class AttractorBasinAnalyzer:
 class DeviationQualityAnalyzer:
     """乖離の質的分析器"""
     
-    def analyze(self, state: 'DynamicLambda3State',
+    def analyze(self, state: 'IntegratedDynamicLambda3State',
                 manifold_result: Dict,
                 attractor_result: Dict) -> Dict:
         """乖離の質的分析を実行"""
@@ -793,7 +800,7 @@ class DeviationQualityAnalyzer:
         
         return recommendations
 
-# =========== 新規追加：拡張機能 ===========
+# =========== 拡張機能 ===========
 
 @dataclass
 class PathInteraction:
@@ -849,7 +856,7 @@ class PulsationEvent:
     tensor_snapshot: Dict[str, float]
 
 class DynamicLambda3State:
-    """拡張版Λ³状態（動的相互作用対応）"""
+    """基本的な動的Λ³状態（統合版のベースクラス）"""
     
     def __init__(self):
         # 基本テンソル
@@ -1106,15 +1113,115 @@ class DynamicLambda3State:
         if self.check_pulsation_conditions() and random.random() > 0.7:
             self.trigger_pulsation()
 
-# =========== 拡張版評価システム ===========
+# =========== 新規：Social多領域テンソルを統合したΛ³状態 ===========
 
-class EnhancedMBTIAssessment:
-    """拡張版MBTI評価システム（動的相互作用対応）"""
+class IntegratedDynamicLambda3State(DynamicLambda3State):
+    """Social多領域テンソルを統合したΛ³状態"""
     
     def __init__(self):
+        super().__init__()
+        
+        # Social多領域テンソルの追加
+        self.social_self = MultidimensionalSocialSelf()
+        
+        # 社会的領域が全体的なΛ³状態に与える影響を追跡
+        self.social_influence_on_core = 0.0
+        self.social_influence_on_shadow = 0.0
+        self.social_influence_on_paths = {}
+    
+    def update_from_social_domains(self):
+        """社会的領域の状態から全体的なΛ³状態を更新"""
+        
+        # エネルギー分布の計算
+        distribution = self.social_self.calculate_resource_distribution()
+        
+        # 全体的なエネルギーバランスがΛ_bodに影響
+        total_energy = distribution['total_energy_balance']
+        self.Λ_bod = np.clip(self.Λ_bod + total_energy * 0.1, 0.1, 1.0)
+        
+        # 孤立パターンがCore自己に影響
+        isolation_patterns = self.social_self.identify_isolation_patterns()
+        if isolation_patterns:
+            avg_isolation = np.mean([p['isolation_score'] for p in isolation_patterns])
+            self.Λ_self_aspects['core'] *= (1 - avg_isolation * 0.1)
+        
+        # Shadow噴出の偏在がShadow側面に影響
+        shadow_eruptions = []
+        for domain, state in self.social_self.domains.items():
+            if state.shadow_eruption > 0.7:
+                shadow_eruptions.append(state.shadow_eruption)
+        
+        if shadow_eruptions:
+            avg_shadow = np.mean(shadow_eruptions)
+            self.Λ_self_aspects['shadow'] = min(0.9, 
+                self.Λ_self_aspects['shadow'] + avg_shadow * 0.05)
+        
+        # 社会的自己の平均をΛ_self_aspects['social']に反映
+        social_healths = [state.calculate_domain_health() 
+                         for state in self.social_self.domains.values()]
+        if social_healths:
+            self.Λ_self_aspects['social'] = np.mean(social_healths)
+        
+        # スピルオーバー効果による認識ノイズの増加
+        spillovers = self.social_self.calculate_spillover_effects()
+        if len(spillovers) > 2:
+            self.perception_noise += 0.05
+    
+    def process_social_feedback_by_domain(self, domain: SocialDomain, 
+                                        feedback: SocialFeedback):
+        """領域別の社会的フィードバック処理"""
+        # 元のadd_social_feedbackに加えて、領域別処理
+        self.add_social_feedback(feedback)
+        self.social_self.add_feedback(domain, feedback)
+        
+        # 領域特異的な影響をPATHに反映
+        domain_state = self.social_self.domains[domain]
+        if domain == SocialDomain.WORK and domain_state.tension_level > 0.8:
+            # 職場ストレスがTeを弱める
+            self.path_states['Te'] *= 0.95
+        elif domain == SocialDomain.ONLINE and domain_state.shadow_eruption > 0.8:
+            # オンラインでのShadow噴出がShadow機能を活性化
+            for shadow_path in ['Ne', 'Ti', 'Fe', 'Si']:
+                self.path_states[shadow_path] = min(0.8, 
+                    self.path_states[shadow_path] + 0.05)
+
+# =========== 統合版評価システム ===========
+
+class IntegratedSocialMBTIAssessment:
+    """Social多領域分析を統合したMBTI評価システム"""
+    
+    def __init__(self):
+        # 既存のコンポーネントを継承
         self.mbti_stacks = {
             'INTJ': MBTIProfile('INTJ', 'Ni', 'Te', 'Fi', 'Se')
         }
+        self.social_assessment = MultidimensionalSocialAssessment()
+    
+    def generate_integrated_questions(self) -> Dict:
+        """基本質問 + 社会的領域別質問の統合セット"""
+        
+        # 既存の拡張質問を取得
+        enhanced_questions = self.generate_enhanced_questions()
+        
+        # 社会的領域別質問を追加
+        social_questions = {}
+        for domain, questions in self.social_assessment.questions.items():
+            # 各領域の主要質問を選択（全部だと多すぎるので）
+            key_questions = [q for q in questions if q.weight >= 0.9][:4]
+            social_questions[f'social_{domain.value}'] = [
+                {
+                    'id': q.id,
+                    'text': q.text,
+                    'scale': q.scale,
+                    'weight': q.weight,
+                    'domain': q.domain.value,
+                    'parameter': q.parameter
+                }
+                for q in key_questions
+            ]
+        
+        # 統合
+        return {**enhanced_questions, **social_questions}
     
     def generate_enhanced_questions(self) -> Dict:
         """拡張版質問セット（イベントベース質問を含む）"""
@@ -1385,22 +1492,6 @@ class EnhancedMBTIAssessment:
                     'type': 'ni_se_conflict'
                 }
             ],
-            'social_network_effects': [
-                {
-                    'id': 'social_1',
-                    'text': '他者からのフィードバックによって自己評価が大きく揺らぐことがありますか？',
-                    'scale': '1:全くない 2:たまに 3:時々 4:頻繁に 5:常に',
-                    'weight': 0.7,
-                    'type': 'social_impact'
-                },
-                {
-                    'id': 'social_2',
-                    'text': '複数の人から矛盾するフィードバックを受けて混乱することがありますか？',
-                    'scale': '1:全くない 2:たまに 3:時々 4:頻繁に 5:常に',
-                    'weight': 0.8,
-                    'type': 'network_confusion'
-                }
-            ],
             'metacognition_noise': [
                 {
                     'id': 'meta_1',
@@ -1439,212 +1530,59 @@ class EnhancedMBTIAssessment:
         all_questions = {**basic_questions, **event_questions}
         return all_questions
     
-    def calculate_dysfunction_scores(self, responses: Dict[str, int]) -> Dict:
-        """回答から機能不全スコアを計算（元の実装を統合）"""
+    def calculate_integrated_evaluation(self, state: IntegratedDynamicLambda3State,
+                                      responses: Dict[str, int]) -> Dict:
+        """統合評価の実行"""
         
-        questions = self.generate_enhanced_questions()
+        # 基本評価を実行
+        base_evaluation = self.calculate_enhanced_evaluation(state, responses)
         
-        # PATHごとのスコア集計
-        path_scores = {
-            'Ni': {'overuse': 0, 'isolation': 0, 'total_weight': 0},
-            'Te': {'dysfunction': 0, 'suppression': 0, 'total_weight': 0},
-            'Fi': {'eruption': 0, 'rigidity': 0, 'total_weight': 0},
-            'Se': {'inferior_grip': 0, 'somatic': 0, 'total_weight': 0},
-            'Ne': {'shadow': 0, 'total_weight': 0},
-            'Ti': {'shadow': 0, 'total_weight': 0},
-            'Fe': {'shadow': 0, 'total_weight': 0},
-            'Si': {'shadow': 0, 'total_weight': 0},
-            'general': {'imbalance': 0, 'total_weight': 0},
-            'physical': {'dysfunction': 0, 'total_weight': 0}
+        # 社会的領域のスコアを計算
+        social_scores = self.social_assessment.calculate_domain_scores(responses)
+        
+        # 社会的状態を更新
+        for domain, scores in social_scores.items():
+            if domain in state.social_self.domains:
+                domain_state = state.social_self.domains[domain]
+                for param, value in scores.items():
+                    setattr(domain_state, param, value)
+                # エネルギーバランスの特別処理
+                if 'energy_balance' in scores:
+                    domain_state.energy_balance = (scores['energy_balance'] - 0.5) * 2
+        
+        # 社会的影響をΛ³状態に反映
+        state.update_from_social_domains()
+        
+        # 社会的分析を実行
+        social_dynamics = EnhancedSocialDynamics()
+        social_dynamics.social_self = state.social_self
+        social_analysis = social_dynamics.generate_detailed_assessment()
+        
+        # 統合された高度分析
+        integrated_advanced_analysis = self._perform_integrated_advanced_analysis(
+            state, base_evaluation.get('dysfunction_scores', {}), social_analysis
+        )
+        
+        # 結果を統合
+        integrated_evaluation = {
+            **base_evaluation,
+            'social_analysis': social_analysis,
+            'integrated_advanced_analysis': integrated_advanced_analysis,
+            'integrated_recommendations': self._generate_integrated_recommendations(
+                base_evaluation, social_analysis, integrated_advanced_analysis
+            )
         }
         
-        # 各質問カテゴリのスコア計算
-        for category, question_list in questions.items():
-            # イベントベース質問はスキップ（別途処理）
-            if category in ['pulsation_events', 'path_conflicts', 'social_network_effects', 
-                           'metacognition_noise', 'critical_events']:
-                continue
-                
-            for q in question_list:
-                if q['id'] in responses:
-                    score = responses[q['id']]
-                    weighted_score = (score - 1) / 4 * q['weight']  # 0-1に正規化
-                    
-                    path = q['path']
-                    pattern = q['pattern']
-                    
-                    if path in path_scores:
-                        if pattern in ['overuse', 'dysfunction', 'eruption', 'inferior_grip', 
-                                      'isolation', 'suppression', 'rigidity', 'somatic']:
-                            path_scores[path][pattern] = path_scores[path].get(pattern, 0) + weighted_score
-                        elif pattern.startswith('shadow'):
-                            path_scores[path]['shadow'] = path_scores[path].get('shadow', 0) + weighted_score
-                        elif pattern in ['sleep_deprivation', 'sleep_quality', 'meal_irregularity', 'eating_disorder']:
-                            path_scores[path]['dysfunction'] = path_scores[path].get('dysfunction', 0) + weighted_score
-                        elif pattern in ['dissociation', 'regression']:
-                            if path == 'general':
-                                path_scores[path]['imbalance'] = path_scores[path].get('imbalance', 0) + weighted_score
-                        
-                        path_scores[path]['total_weight'] += q['weight']
-        
-        # 正規化
-        normalized_scores = {}
-        for path, scores in path_scores.items():
-            if scores['total_weight'] > 0:
-                for pattern, value in scores.items():
-                    if pattern != 'total_weight':
-                        normalized_scores[f'{path}_{pattern}'] = value / scores['total_weight']
-        
-        return normalized_scores
+        return integrated_evaluation
     
-    def apply_dysfunction_effects(self, state: DynamicLambda3State,
-                                dysfunction_scores: Dict[str, float]) -> None:
-        """機能不全スコアに基づく状態への影響適用"""
-        
-        # Ni過剰使用の影響
-        if 'Ni_overuse' in dysfunction_scores:
-            ni_overuse = dysfunction_scores['Ni_overuse']
-            if ni_overuse > 0.7:
-                state.path_preferences['Ni'] = PathPreference.DEPENDENT
-                state.perception_noise += ni_overuse * 0.3
-                state.Λ_self_aspects['ideal'] = min(0.95, state.Λ_self_aspects['ideal'] + ni_overuse * 0.1)
-        
-        # Te機能不全の影響
-        if 'Te_dysfunction' in dysfunction_scores:
-            te_dysfunction = dysfunction_scores['Te_dysfunction']
-            if te_dysfunction > 0.6:
-                state.path_preferences['Te'] = PathPreference.RELUCTANT
-                state.Λ_self_aspects['core'] *= (1 - te_dysfunction * 0.2)
-                state.Λ_self_aspects['social'] *= (1 - te_dysfunction * 0.1)
-        
-        # Fi爆発の影響
-        if 'Fi_eruption' in dysfunction_scores:
-            fi_eruption = dysfunction_scores['Fi_eruption']
-            if fi_eruption > 0.5:
-                state.path_preferences['Fi'] = PathPreference.PREFERRED
-                state.emotional_state.anger += fi_eruption * 0.3
-                state.emotional_state.sadness += fi_eruption * 0.2
-        
-        # Se劣等機能の暴走
-        if 'Se_inferior_grip' in dysfunction_scores:
-            se_grip = dysfunction_scores['Se_inferior_grip']
-            if se_grip > 0.5:
-                state.path_preferences['Se'] = PathPreference.AVOIDED
-                state.Λ_self_aspects['shadow'] = min(0.8, 
-                    state.Λ_self_aspects['shadow'] + se_grip * 0.3)
-                state.σs *= (1 - se_grip * 0.3)
-                state.ρT = min(0.95, state.ρT + se_grip * 0.4)
-                state.Λ_bod *= (1 - se_grip * 0.2)
-        
-        # 全体的な不均衡
-        if 'general_imbalance' in dysfunction_scores:
-            imbalance = dysfunction_scores['general_imbalance']
-            if imbalance > 0.6:
-                state.metacognition *= (1 - imbalance * 0.3)
-                for path in ['Ni', 'Te', 'Fi', 'Se']:
-                    state.path_trauma_count[path] += int(imbalance * 5)
-        
-        # シャドウ機能の影響
-        shadow_scores = {
-            'Ne': dysfunction_scores.get('Ne_shadow', 0),
-            'Ti': dysfunction_scores.get('Ti_shadow', 0),
-            'Fe': dysfunction_scores.get('Fe_shadow', 0),
-            'Si': dysfunction_scores.get('Si_shadow', 0)
-        }
-        
-        total_shadow_activation = sum(shadow_scores.values()) / 4
-        
-        if total_shadow_activation > 0.5:
-            state.Λ_self_aspects['shadow'] = min(0.9, 
-                state.Λ_self_aspects['shadow'] + total_shadow_activation * 0.4)
-            state.perception_noise += total_shadow_activation * 0.2
-            
-            # 各シャドウ機能の特異的影響
-            if shadow_scores['Ne'] > 0.6:
-                state.path_preferences['Ne'] = PathPreference.DEPENDENT
-                state.ρT = min(0.95, state.ρT + 0.3)
-                
-            if shadow_scores['Ti'] > 0.6:
-                state.path_preferences['Ti'] = PathPreference.PREFERRED
-                state.σs *= 0.7
-                
-            if shadow_scores['Fe'] > 0.6:
-                state.path_preferences['Fe'] = PathPreference.DEPENDENT
-                state.Λ_self_aspects['social'] *= 0.8
-                
-            if shadow_scores['Si'] > 0.6:
-                state.path_preferences['Si'] = PathPreference.PREFERRED
-                state.Λ_bod *= 0.8
-        
-        # 身体的要因の処理
-        if 'physical_dysfunction' in dysfunction_scores:
-            physical_dysfunction = dysfunction_scores['physical_dysfunction']
-            if physical_dysfunction > 0.5:
-                state.Λ_bod *= (1 - physical_dysfunction * 0.3)
-                state.perception_noise += physical_dysfunction * 0.1
-                state.metacognition *= (1 - physical_dysfunction * 0.1)
-                
-                # 重度の身体的不調は発達段階にも影響
-                if physical_dysfunction > 0.7:
-                    state.developmental_stage = DevelopmentalStage.CRISIS
-    
-    def apply_enhanced_dynamics(self, state: DynamicLambda3State, 
-                               responses: Dict[str, int]) -> None:
-        """拡張された動的効果の適用"""
-        
-        # Pulsationイベントの生成
-        if responses.get('pulse_1', 0) >= 4:
-            # 高頻度の拍動
-            for _ in range(3):
-                state.trigger_pulsation('emotional_overflow')
-                
-        # PATH葛藤の処理
-        if responses.get('conflict_1', 0) >= 4:
-            # Te-Fi葛藤
-            state.path_interaction.set_interaction('Te', 'Fi', -0.6)
-            state.perception_noise += 0.1
-            
-        if responses.get('conflict_2', 0) >= 4:
-            # Ni-Se葛藤
-            state.path_interaction.set_interaction('Ni', 'Se', -0.8)
-            state.ρT += 0.2
-        
-        # 社会的ネットワーク効果
-        if responses.get('social_1', 0) >= 3:
-            # 不安定な社会的自己
-            feedback = SocialFeedback(
-                source_id='assessment',
-                valence=-0.3,
-                intensity=0.7,
-                authenticity=0.8,
-                category='criticism'
-            )
-            state.add_social_feedback(feedback)
-        
-        # メタ認知とノイズ
-        if responses.get('meta_1', 0) >= 4:
-            state.metacognition *= 0.7
-        if responses.get('meta_2', 0) >= 4:
-            state.perception_noise += 0.2
-        
-        # 重大イベントの処理
-        if responses.get('event_1', 0) >= 4:
-            event = Event(
-                event_type='loss',
-                impact=-0.8,
-                uncertainty=0.3,
-                duration=responses.get('event_2', 3) * 10
-            )
-            state.process_event(event)
-    
-    def calculate_enhanced_evaluation(self, state: DynamicLambda3State, 
+    def calculate_enhanced_evaluation(self, state: IntegratedDynamicLambda3State, 
                                     responses: Dict[str, int]) -> Dict:
-        """拡張版評価の計算"""
+        """拡張版評価の計算（元のEnhancedMBTIAssessmentから簡略版）"""
         
-        # 元の機能不全スコアを計算
+        # 機能不全スコアを計算
         dysfunction_scores = self.calculate_dysfunction_scores(responses)
         
-        # 基本評価指標（元の実装を考慮）
+        # 基本評価指標
         indicators = {
             'core_stability': state.Λ_self_aspects['core'] > 0.5,
             'shadow_integration': state.Λ_self_aspects['shadow'] < state.Λ_self_aspects['core'],
@@ -1653,414 +1591,318 @@ class EnhancedMBTIAssessment:
             'noise_control': state.perception_noise < 0.3,
             'tension_regulation': state.ρT < 0.8,
             'bodily_vitality': state.Λ_bod > 0.5,
-            'pulsation_balance': len(state.pulsation_history) < 10,
-            'ni_overuse_control': dysfunction_scores.get('Ni_overuse', 0) < 0.7,
-            'se_grip_control': dysfunction_scores.get('Se_inferior_grip', 0) < 0.6,
-            'shadow_activation_control': sum([
-                dysfunction_scores.get('Ne_shadow', 0),
-                dysfunction_scores.get('Ti_shadow', 0),
-                dysfunction_scores.get('Fe_shadow', 0),
-                dysfunction_scores.get('Si_shadow', 0)
-            ]) / 4 < 0.5
         }
-        
-        # PATH相互作用の健全性
-        path_health = self._evaluate_path_interactions(state)
-        
-        # ネットワーク効果
-        network_health = self._evaluate_social_network(state)
         
         # 総合スコア
-        basic_score = sum(1 for v in indicators.values() if v)
-        interaction_score = path_health['score']
-        network_score = network_health['score']
+        total_score = sum(1 for v in indicators.values() if v)
         
-        total_score = basic_score + interaction_score + network_score
-        
-        # 重症度判定（より細かい基準）
-        if total_score <= 4:
+        # 重症度判定
+        if total_score <= 2:
             severity = "severe"
-            interpretation = "重度の機能不全・緊急介入必要"
-        elif total_score <= 7:
-            severity = "moderate-severe"
-            interpretation = "中等度から重度の機能不全"
-        elif total_score <= 10:
+        elif total_score <= 4:
             severity = "moderate"
-            interpretation = "中等度の機能不全"
-        elif total_score <= 12:
-            severity = "mild"
-            interpretation = "軽度の機能不全"
         else:
-            severity = "healthy"
-            interpretation = "健康的な状態"
-        
-        # 主要な問題の特定
-        primary_issues = []
-        if dysfunction_scores.get('Ni_overuse', 0) > 0.6:
-            primary_issues.append("Ni過剰使用による現実逃避")
-        if dysfunction_scores.get('Se_inferior_grip', 0) > 0.5:
-            primary_issues.append("Se劣等機能の暴走")
-        if not indicators['metacognitive_function']:
-            primary_issues.append("メタ認知の著しい低下")
-        if dysfunction_scores.get('general_imbalance', 0) > 0.7:
-            primary_issues.append("全体的な心理的不均衡")
-        if not indicators['shadow_activation_control']:
-            primary_issues.append("シャドウ機能の活性化による人格の分裂傾向")
-        
-        # ========== 高度分析の実行 ==========
-        # マニフォールド解析
-        manifold_analysis = self.perform_manifold_analysis(state, dysfunction_scores)
-        
-        # アトラクター解析
-        attractor_analysis = self.perform_attractor_analysis(state, 'INTJ')
-        
-        # 乖離の質的分析
-        deviation_quality = self.perform_deviation_quality_analysis(
-            state, manifold_analysis, attractor_analysis
-        )
-        
-        # 高度分析結果を統合
-        advanced_analysis = {
-            'manifold': manifold_analysis,
-            'attractor': attractor_analysis,
-            'deviation_quality': deviation_quality
-        }
+            severity = "mild"
         
         return {
             'severity': severity,
-            'interpretation': interpretation,
             'total_score': total_score,
-            'max_score': 16,  # 基本11 + PATH相互作用3 + ネットワーク2
+            'max_score': len(indicators),
             'indicators': indicators,
             'dysfunction_scores': dysfunction_scores,
-            'path_health': path_health,
-            'network_health': network_health,
-            'pulsation_analysis': self._analyze_pulsations(state),
-            'primary_issues': primary_issues,
-            'recommendations': self._generate_recommendations(state, severity, dysfunction_scores),
-            'advanced_analysis': advanced_analysis  # 新規追加
+            'recommendations': []
         }
     
-    def perform_manifold_analysis(self, state: DynamicLambda3State,
-                                dysfunction_scores: Dict[str, float]) -> Dict:
-        """Λ³マニフォールド解析の実行"""
-        analyzer = Lambda3ManifoldAnalyzer()
-        return analyzer.analyze(state, dysfunction_scores)
-    
-    def perform_attractor_analysis(self, state: DynamicLambda3State,
-                                 mbti_type: str) -> Dict:
-        """アトラクター盆地解析の実行"""
-        analyzer = AttractorBasinAnalyzer(mbti_type)
-        return analyzer.analyze(state)
-    
-    def perform_deviation_quality_analysis(self, state: DynamicLambda3State,
-                                         manifold_result: Dict,
-                                         attractor_result: Dict) -> Dict:
-        """乖離の質的分析の実行"""
-        analyzer = DeviationQualityAnalyzer()
-        return analyzer.analyze(state, manifold_result, attractor_result)
-    
-    def _evaluate_path_interactions(self, state: DynamicLambda3State) -> Dict:
-        """PATH相互作用の健全性評価"""
-        conflicts = 0
-        synergies = 0
+    def calculate_dysfunction_scores(self, responses: Dict[str, int]) -> Dict:
+        """回答から機能不全スコアを計算（簡略版）"""
+        scores = {}
         
-        for (path1, path2), strength in state.path_interaction.resonance_factors.items():
-            if strength < -0.5:
-                conflicts += 1
-            elif strength > 0.5:
-                synergies += 1
+        # Ni過剰使用
+        if 'ni_1' in responses:
+            scores['Ni_overuse'] = (responses['ni_1'] - 1) / 4
         
-        score = max(0, 3 - conflicts + synergies // 2)
+        # Te機能不全
+        if 'te_1' in responses:
+            scores['Te_dysfunction'] = (responses['te_1'] - 1) / 4
+        
+        # Se劣等機能
+        if 'se_1' in responses:
+            scores['Se_inferior_grip'] = (responses['se_1'] - 1) / 4
+        
+        return scores
+    
+    def _perform_integrated_advanced_analysis(self, 
+                                            state: IntegratedDynamicLambda3State,
+                                            dysfunction_scores: Dict,
+                                            social_analysis: Dict) -> Dict:
+        """社会的次元を含む統合的な高度分析"""
+        
+        # 拡張マニフォールド解析（社会的次元を追加）
+        manifold_analyzer = Lambda3ManifoldAnalyzer()
+        base_manifold = manifold_analyzer.analyze(state, dysfunction_scores)
+        
+        # 社会的次元をマニフォールドに追加
+        social_coordinates = []
+        for domain in SocialDomain:
+            if domain in state.social_self.domains:
+                domain_state = state.social_self.domains[domain]
+                social_coordinates.extend([
+                    domain_state.resonance_rate,
+                    domain_state.energy_balance,
+                    domain_state.shadow_eruption
+                ])
+        
+        extended_coordinates = np.concatenate([
+            base_manifold['current_position'].coordinates,
+            social_coordinates
+        ])
+        
+        # アトラクター解析の拡張
+        attractor_analyzer = AttractorBasinAnalyzer('INTJ')
+        base_attractor = attractor_analyzer.analyze(state)
+        
+        # 社会的孤立アトラクターの追加
+        isolation_score = len(social_analysis['isolation_patterns']) / len(SocialDomain)
+        if isolation_score > 0.5:
+            base_attractor['nearby_attractors'].append({
+                'attractor': AttractorBasin(
+                    name="social_isolation_spiral",
+                    center=np.zeros(8),  # すべてのPATHが低活性
+                    radius=0.4,
+                    basin_depth=0.8,
+                    stability_index=0.9,
+                    attractor_type="pathological"
+                ),
+                'distance': isolation_score,
+                'force': isolation_score * 2,
+                'in_basin': isolation_score > 0.7
+            })
+        
+        # 統合的な乖離分析
+        integrated_deviation = self._analyze_integrated_deviation(
+            state, base_manifold, social_analysis
+        )
         
         return {
-            'score': min(score, 3),
-            'conflicts': conflicts,
-            'synergies': synergies
+            'extended_manifold': {
+                'coordinates': extended_coordinates,
+                'dimension': len(extended_coordinates),
+                'social_curvature': self._calculate_social_curvature(social_analysis)
+            },
+            'social_attractor_dynamics': {
+                'isolation_risk': isolation_score,
+                'resource_attractor_strength': len(social_analysis['energy_distribution']['resources']) / 6
+            },
+            'integrated_deviation': integrated_deviation,
+            'cross_domain_patterns': self._identify_cross_domain_patterns(state, social_analysis)
         }
     
-    def _evaluate_social_network(self, state: DynamicLambda3State) -> Dict:
-        """社会的ネットワークの健全性評価"""
-        if not state.social_network:
-            return {'score': 1, 'sources': 0, 'balance': 0}
+    def _calculate_social_curvature(self, social_analysis: Dict) -> float:
+        """社会的空間の曲率（非対称性の度合い）"""
+        # リソースとドレインの偏在が空間を歪める
+        resources = len(social_analysis['energy_distribution']['resources'])
+        drains = len(social_analysis['energy_distribution']['drains'])
         
-        positive_count = 0
-        negative_count = 0
+        if resources + drains == 0:
+            return 0.1
         
-        for feedbacks in state.social_network.values():
-            for fb in feedbacks:
-                if fb.valence > 0:
-                    positive_count += 1
-                else:
-                    negative_count += 1
+        asymmetry = abs(resources - drains) / (resources + drains)
+        return 0.1 + asymmetry * 0.5
+    
+    def _analyze_integrated_deviation(self, state, manifold_result, social_analysis) -> Dict:
+        """統合的な乖離パターンの分析"""
         
-        balance = positive_count / (positive_count + negative_count + 1)
-        score = 2 if 0.3 < balance < 0.7 else 1
+        patterns = []
+        
+        # 社会的仮面と内的真実の乖離
+        social_authenticity_avg = np.mean([
+            s.authenticity for s in state.social_self.domains.values()
+        ])
+        if social_authenticity_avg < 0.4 and state.Λ_self_aspects['core'] > 0.6:
+            patterns.append({
+                'type': 'social_mask_core_split',
+                'severity': 0.6 - social_authenticity_avg,
+                'description': '社会的仮面と内的自己の深刻な分裂'
+            })
+        
+        # エネルギー枯渇による機能崩壊
+        if not social_analysis['energy_distribution']['is_sustainable'] and state.Λ_bod < 0.4:
+            patterns.append({
+                'type': 'energy_depletion_collapse',
+                'severity': 0.8,
+                'description': '社会的エネルギー枯渇による全体的機能崩壊'
+            })
+        
+        # Shadow噴出の領域限定性
+        shadow_domains = [d for d, s in state.social_self.domains.items() 
+                         if s.shadow_eruption > 0.7]
+        if shadow_domains and len(shadow_domains) < 3:
+            patterns.append({
+                'type': 'compartmentalized_shadow',
+                'severity': 0.5,
+                'description': f'特定領域({[d.value for d in shadow_domains]})でのShadow噴出'
+            })
         
         return {
-            'score': score,
-            'sources': len(state.social_network),
-            'balance': balance
+            'patterns': patterns,
+            'primary_pattern': max(patterns, key=lambda x: x['severity']) if patterns else None,
+            'integration_potential': self._calculate_integration_potential(state, social_analysis)
         }
     
-    def _analyze_pulsations(self, state: DynamicLambda3State) -> Dict:
-        """拍動パターンの分析"""
-        if not state.pulsation_history:
-            return {'frequency': 0, 'average_intensity': 0, 'pattern': 'none'}
+    def _calculate_integration_potential(self, state, social_analysis) -> float:
+        """統合可能性の評価"""
+        potential = 0.5
         
-        recent_pulsations = state.pulsation_history[-10:]
-        frequency = len(recent_pulsations)
-        avg_intensity = np.mean([p.intensity for p in recent_pulsations])
+        # リソース領域の存在
+        if social_analysis['energy_distribution']['resources']:
+            potential += 0.2
         
-        if frequency > 7:
-            pattern = 'hyperactive'
-        elif frequency > 4:
-            pattern = 'active'
-        elif frequency > 1:
-            pattern = 'moderate'
-        else:
-            pattern = 'suppressed'
+        # メタ認知の高さ
+        potential += state.metacognition * 0.2
         
-        return {
-            'frequency': frequency,
-            'average_intensity': avg_intensity,
-            'pattern': pattern
-        }
+        # 少なくとも1つの安全な領域
+        safe_domains = [d for d, s in state.social_self.domains.items() 
+                       if s.safety_index > 0.7]
+        if safe_domains:
+            potential += 0.1
+        
+        return min(potential, 1.0)
     
-    def _generate_recommendations(self, state: DynamicLambda3State, 
-                                severity: str, 
-                                dysfunction_scores: Dict[str, float]) -> List[str]:
-        """動的状態と機能不全スコアに基づく推奨事項"""
+    def _identify_cross_domain_patterns(self, state, social_analysis) -> List[Dict]:
+        """領域横断的なパターンの特定"""
+        patterns = []
+        
+        # PATH機能と社会的領域の相関
+        if state.path_states['Te'] < 0.3 and SocialDomain.WORK in state.social_self.domains:
+            work_state = state.social_self.domains[SocialDomain.WORK]
+            if work_state.tension_level > 0.7:
+                patterns.append({
+                    'pattern': 'Te_collapse_work_stress',
+                    'description': 'Te機能不全と職場ストレスの悪循環'
+                })
+        
+        # Shadow活性化とオンライン行動
+        shadow_activation = sum(state.path_states[p] for p in ['Ne', 'Ti', 'Fe', 'Si']) / 4
+        if shadow_activation > 0.6 and SocialDomain.ONLINE in state.social_self.domains:
+            online_state = state.social_self.domains[SocialDomain.ONLINE]
+            if online_state.shadow_eruption > 0.7:
+                patterns.append({
+                    'pattern': 'shadow_online_amplification',
+                    'description': 'Shadow機能とオンライン行動の相互増幅'
+                })
+        
+        return patterns
+    
+    def _generate_integrated_recommendations(self, base_eval, social_analysis, 
+                                          integrated_analysis) -> List[str]:
+        """統合的な推奨事項の生成"""
         recommendations = []
         
-        # 基本推奨
-        if severity in ["severe", "moderate-severe"]:
-            recommendations.append("専門家（精神科医・心理士）への相談を強く推奨")
+        # 基本推奨を含める
+        recommendations.extend(base_eval.get('recommendations', []))
         
-        # Ni過剰使用への対処
-        if dysfunction_scores.get('Ni_overuse', 0) > 0.6:
-            recommendations.append("具体的な行動計画の作成と実行（小さなステップから）")
-            recommendations.append("現実的な目標設定の練習")
+        # 社会的領域特有の推奨
+        if social_analysis['intervention_map']['immediate_priorities']:
+            recommendations.append("\n【社会的領域への介入】")
+            for priority in social_analysis['intervention_map']['immediate_priorities'][:2]:
+                recommendations.append(f"・{priority['domain']}領域: {priority['action']}")
         
-        # Se劣等機能暴走への対処
-        if dysfunction_scores.get('Se_inferior_grip', 0) > 0.5:
-            recommendations.append("健全な感覚体験の構造化（運動、自然散策など）")
-            recommendations.append("衝動的行動の前に一時停止する練習")
+        # クロスドメインパターンへの対応
+        cross_patterns = integrated_analysis.get('cross_domain_patterns', [])
+        if cross_patterns:
+            recommendations.append("\n【統合的アプローチ】")
+            for pattern in cross_patterns:
+                if pattern['pattern'] == 'Te_collapse_work_stress':
+                    recommendations.append("・職場でのTe機能回復プログラム（小さなタスク完了から）")
+                elif pattern['pattern'] == 'shadow_online_amplification':
+                    recommendations.append("・オンライン活動の構造化とShadowワークの並行実施")
         
-        # PATH相互作用に基づく推奨
-        if state.path_interaction.resonance_factors.get(('Ni', 'Se'), 0) < -0.7:
-            recommendations.append("Ni-Se統合のための身体的グラウンディング練習")
-            recommendations.append("マインドフルネスや瞑想での現在への注目")
-        
-        # メタ認知に基づく推奨
-        if state.metacognition < 0.4:
-            recommendations.append("日記や内省による自己観察力の回復")
-            recommendations.append("認知行動療法的アプローチの検討")
-        
-        # シャドウ機能への対処
-        shadow_activation = sum([
-            dysfunction_scores.get('Ne_shadow', 0),
-            dysfunction_scores.get('Ti_shadow', 0),
-            dysfunction_scores.get('Fe_shadow', 0),
-            dysfunction_scores.get('Si_shadow', 0)
-        ]) / 4
-        
-        if shadow_activation > 0.5:
-            recommendations.append("シャドウワーク：抑圧された側面との対話")
-            recommendations.append("夢分析やアクティブイマジネーション")
-            recommendations.append("統合的な心理療法（ユング派分析など）の検討")
-        
-        # 社会的ネットワークに基づく推奨
-        if len(state.social_network) < 2:
-            recommendations.append("信頼できる支援者との関係構築")
-        
-        # 拍動パターンに基づく推奨
-        pulsation_analysis = self._analyze_pulsations(state)
-        if pulsation_analysis['pattern'] == 'hyperactive':
-            recommendations.append("感情調整スキルの学習（DBTなど）")
-            recommendations.append("定期的な休息と回復時間の確保")
-        elif pulsation_analysis['pattern'] == 'suppressed':
-            recommendations.append("感情表現の安全な練習")
-            recommendations.append("身体感覚への注目（ボディスキャン等）")
-        
-        # 身体的要因への対処
-        if dysfunction_scores.get('physical_dysfunction', 0) > 0.5:
-            recommendations.append("睡眠衛生の改善（7-8時間の確保）")
-            recommendations.append("規則正しい食事リズムの確立")
-            recommendations.append("血糖値の安定化（タンパク質を含む朝食）")
-        
-        # 身体状態の低下への対処
-        if state.Λ_bod < 0.5:
-            recommendations.append("軽い運動習慣の導入（ウォーキング、ヨガなど）")
-            recommendations.append("自然との接触時間を増やす")
+        # エネルギー管理戦略
+        if not social_analysis['energy_distribution']['is_sustainable']:
+            recommendations.append("\n【エネルギー管理】")
+            recommendations.append("・エネルギードレイン領域での境界設定を最優先")
+            if social_analysis['energy_distribution']['resources']:
+                resource = social_analysis['energy_distribution']['resources'][0]['domain']
+                recommendations.append(f"・{resource}でのエネルギー充電時間を確保")
         
         return recommendations
 
-def run_enhanced_assessment():
-    """拡張版評価の実行例"""
-    print("=== 拡張版INTJ評価システム（Λ³動的相互作用モデル） ===\n")
+# =========== デモンストレーション関数 ===========
+
+def demonstrate_integrated_system():
+    """統合システムのデモンストレーション"""
     
-    # システム初期化
-    assessor = EnhancedMBTIAssessment()
-    state = DynamicLambda3State()
+    print("=== 統合版Λ³評価システム（Social多領域テンソル統合） ===\n")
     
-    # サンプル回答（拡張版）
+    # 統合状態の初期化
+    state = IntegratedDynamicLambda3State()
+    assessor = IntegratedSocialMBTIAssessment()
+    
+    # サンプル回答（基本 + 社会的領域）
     sample_responses = {
-        # 基本質問（完全版）
+        # 既存の基本質問への回答
         'ni_1': 4, 'ni_2': 5, 'ni_3': 4,
         'te_1': 4, 'te_2': 3,
-        'fi_1': 2, 'fi_2': 3,
-        'se_1': 5, 'se_2': 4, 'se_3': 3,
+        'se_1': 5, 'se_2': 4,
         'gen_1': 4, 'gen_2': 4,
-        # シャドウ機能
-        'sh_ne_1': 3, 'sh_ne_2': 4,
-        'sh_ti_1': 4, 'sh_ti_2': 3,
-        'sh_fe_1': 3, 'sh_fe_2': 4,
-        'sh_si_1': 5, 'sh_si_2': 4,
-        # 生活習慣
-        'sleep_1': 4, 'sleep_2': 4,
-        'meal_1': 3, 'meal_2': 4,
-        # イベントベース質問
-        'pulse_1': 4,      # 高頻度の拍動
-        'pulse_2': 4,
-        'conflict_1': 5,   # 強いTe-Fi葛藤
-        'conflict_2': 4,   # Ni-Se葛藤
-        'social_1': 4,     # 社会的フィードバックに敏感
-        'social_2': 3,
-        'meta_1': 4,       # メタ認知の低下
-        'meta_2': 5,       # 高い認識ノイズ
-        'event_1': 4,      # 大きな喪失体験
-        'event_2': 4       # 持続的影響
+        
+        # 社会的領域の質問への回答
+        'work_resonance_1': 2,     # 職場で本音を言えない
+        'work_shadow_1': 4,        # Shadow噴出
+        'work_energy_1': 5,        # エネルギー消耗
+        'work_safety_1': 2,        # 安全でない
+        
+        'family_resonance_1': 4,   # 家族では本音
+        'family_shadow_1': 2,      # Shadow少ない
+        'family_energy_1': 2,      # エネルギー充電
+        'family_safety_1': 5,      # とても安全
+        
+        'online_resonance_1': 2,   # オンラインで本音言えない
+        'online_shadow_1': 5,      # Shadow噴出激しい
+        'online_energy_1': 4,      # エネルギー消耗
+        'online_safety_1': 2,      # 安全でない
     }
     
-    # 初期状態の表示
-    print("初期状態:")
-    print(f"  Core: {state.Λ_self_aspects['core']:.2f}")
-    print(f"  Shadow: {state.Λ_self_aspects['shadow']:.2f}")
-    print(f"  Metacognition: {state.metacognition:.2f}")
-    print(f"  Perception Noise: {state.perception_noise:.2f}")
+    # 統合評価の実行
+    evaluation = assessor.calculate_integrated_evaluation(state, sample_responses)
     
-    # 機能不全スコアの計算と適用
-    dysfunction_scores = assessor.calculate_dysfunction_scores(sample_responses)
-    assessor.apply_dysfunction_effects(state, dysfunction_scores)
-    
-    # 動的効果の適用
-    assessor.apply_enhanced_dynamics(state, sample_responses)
-    
-    # 数回の時間ステップ実行
-    print("\n時系列シミュレーション:")
-    for i in range(5):
-        state.time_step_update()
-        print(f"  Step {i+1}: ρT={state.ρT:.2f}, "
-              f"Noise={state.perception_noise:.2f}, "
-              f"Pulsations={len(state.pulsation_history)}")
-    
-    # 評価の実行
-    evaluation = assessor.calculate_enhanced_evaluation(state, sample_responses)
-    
-    print(f"\n=== 拡張評価結果 ===")
+    # 結果表示
+    print("【基本評価結果】")
     print(f"重症度: {evaluation['severity']}")
-    print(f"解釈: {evaluation['interpretation']}")
     print(f"総合スコア: {evaluation['total_score']}/{evaluation['max_score']}")
     
-    print("\n基本指標:")
-    for key, value in evaluation['indicators'].items():
-        status = "✓" if value else "✗"
-        print(f"  {status} {key}")
+    print("\n【社会的領域分析】")
+    social = evaluation['social_analysis']
+    print(f"全体的な社会的健康度: {social['overall_social_health']:.2f}")
+    print(f"エネルギー源: {[r['domain'] for r in social['energy_distribution']['resources']]}")
+    print(f"エネルギードレイン: {[d['domain'] for d in social['energy_distribution']['drains']]}")
     
-    print("\n主要な機能不全:")
-    for key, score in evaluation['dysfunction_scores'].items():
-        if score > 0.5:
-            print(f"  • {key}: {score:.2f}")
+    print("\n【孤立パターン】")
+    for isolation in social['isolation_patterns']:
+        print(f"・{isolation['domain']}: スコア {isolation['isolation_score']:.2f}")
     
-    print(f"\nPATH相互作用:")
-    print(f"  葛藤数: {evaluation['path_health']['conflicts']}")
-    print(f"  協調数: {evaluation['path_health']['synergies']}")
-    print(f"  スコア: {evaluation['path_health']['score']}/3")
+    print("\n【統合的高度分析】")
+    integrated = evaluation['integrated_advanced_analysis']
+    print(f"拡張マニフォールド次元: {integrated['extended_manifold']['dimension']}")
+    print(f"社会的空間曲率: {integrated['extended_manifold']['social_curvature']:.2f}")
+    print(f"孤立リスク: {integrated['social_attractor_dynamics']['isolation_risk']:.2f}")
     
-    print(f"\n拍動分析:")
-    print(f"  頻度: {evaluation['pulsation_analysis']['frequency']}")
-    print(f"  平均強度: {evaluation['pulsation_analysis']['average_intensity']:.2f}")
-    print(f"  パターン: {evaluation['pulsation_analysis']['pattern']}")
+    if integrated['integrated_deviation']['patterns']:
+        print("\n【統合的乖離パターン】")
+        for pattern in integrated['integrated_deviation']['patterns']:
+            print(f"・{pattern['description']} (深刻度: {pattern['severity']:.2f})")
     
-    if evaluation['primary_issues']:
-        print("\n主要な問題:")
-        for issue in evaluation['primary_issues']:
-            print(f"  • {issue}")
+    if integrated['cross_domain_patterns']:
+        print("\n【領域横断パターン】")
+        for pattern in integrated['cross_domain_patterns']:
+            print(f"・{pattern['description']}")
     
-    print("\n推奨事項:")
-    for rec in evaluation['recommendations']:
-        print(f"  • {rec}")
-    
-    # ========== 高度分析結果の表示 ==========
-    if 'advanced_analysis' in evaluation:
-        print("\n\n=== 高度分析結果 ===")
-        
-        # マニフォールド解析
-        manifold = evaluation['advanced_analysis']['manifold']
-        print("\n【Λ³マニフォールド解析】")
-        print(f"  健全状態への測地線距離: {manifold['geodesic_distance_to_health']:.2f}")
-        print(f"  局所曲率: {manifold['current_position'].curvature:.2f}")
-        print(f"  位相速度: {manifold['phase_space_velocity']:.2f}")
-        print(f"  近傍アトラクター: {', '.join(manifold['current_position'].nearby_attractors)}")
-        if manifold['critical_points']:
-            print("  臨界点:")
-            for cp in manifold['critical_points']:
-                print(f"    - {cp['description']} (深刻度: {cp['severity']:.2f})")
-        
-        # アトラクター解析
-        attractor = evaluation['advanced_analysis']['attractor']
-        print("\n【アトラクター盆地解析】")
-        if attractor['nearest_attractor']:
-            nearest = attractor['nearest_attractor']
-            print(f"  最近接アトラクター: {nearest['attractor'].name}")
-            print(f"    タイプ: {nearest['attractor'].attractor_type}")
-            print(f"    距離: {nearest['distance']:.2f}")
-            print(f"    盆地内: {'Yes' if nearest['in_basin'] else 'No'}")
-        
-        trajectory = attractor['trajectory_prediction']
-        print(f"  予測軌道: {trajectory['direction']} → {trajectory['target']}")
-        if trajectory['target']:
-            print(f"    到達予想時間: {trajectory['estimated_time']:.1f}")
-            print(f"    確信度: {trajectory['confidence']:.2f}")
-        
-        print(f"  安定性: {attractor['stability_analysis']['type']}")
-        print(f"  脱出難易度: {attractor['escape_difficulty']:.2f}")
-        
-        # 乖離の質的分析
-        quality = evaluation['advanced_analysis']['deviation_quality']
-        deviation = quality['deviation_quality']
-        print("\n【乖離の質的分析】")
-        print(f"  乖離タイプ: {deviation.deviation_type}")
-        print(f"  パターン: {deviation.pattern}")
-        print(f"  成長可能性: {deviation.growth_potential:.2f}")
-        
-        if quality['constructive_aspects']:
-            print(f"  建設的側面:")
-            for aspect in quality['constructive_aspects']:
-                print(f"    + {aspect}")
-        
-        if quality['destructive_aspects']:
-            print(f"  破壊的側面:")
-            for aspect in quality['destructive_aspects']:
-                print(f"    - {aspect}")
-        
-        print(f"  変容準備度: {quality['transformation_readiness']:.2f}")
-        
-        print("\n  質的評価に基づく推奨:")
-        for rec in quality['recommendations']:
-            print(f"    • {rec}")
-    
-    # 最終状態
-    print(f"\n\n最終状態:")
-    print(f"  Core: {state.Λ_self_aspects['core']:.2f}")
-    print(f"  Shadow: {state.Λ_self_aspects['shadow']:.2f}")
-    print(f"  Social: {state.Λ_self_aspects['social']:.2f}")
-    print(f"  Metacognition: {state.metacognition:.2f}")
-    print(f"  Active Events: {len(state.active_events)}")
+    print("\n【統合的推奨事項】")
+    for i, rec in enumerate(evaluation['integrated_recommendations'][:10], 1):
+        print(f"{i}. {rec}")
     
     return state, evaluation
 
-# 実行例
+# 実行
 if __name__ == "__main__":
-    result_state, evaluation = run_enhanced_assessment()
+    state, evaluation = demonstrate_integrated_system()
