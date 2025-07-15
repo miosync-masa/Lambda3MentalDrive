@@ -2197,8 +2197,6 @@ def demonstrate_integrated_system():
     # 統合状態の初期化
     state = IntegratedDynamicLambda3State()
     assessor = IntegratedSocialMBTIAssessment()
-    # 粘性システムの初期化（追加）
-    from viscosity_tensor_extension import IntegratedViscositySystem
     viscosity_system = IntegratedViscositySystem()
     
     # サンプル回答（基本 + 社会的領域）
