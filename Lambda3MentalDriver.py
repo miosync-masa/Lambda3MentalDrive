@@ -2515,6 +2515,34 @@ def demonstrate_integrated_system():
     print(f"社会的空間曲率: {integrated['extended_manifold']['social_curvature']:.2f}")
     print(f"孤立リスク: {integrated['social_attractor_dynamics']['isolation_risk']:.2f}")
     
+    # アトラクター解析の詳細表示（追加）
+    print("\n【アトラクター盆地解析】")
+    # 基本評価からアトラクター解析を実行（必要なら）
+    attractor_analyzer = AttractorBasinAnalyzer('INTJ')
+    attractor_result = attractor_analyzer.analyze(state)
+    
+    if attractor_result['nearby_attractors']:
+        print("近傍のアトラクター:")
+        for attractor_info in attractor_result['nearby_attractors']:
+            attractor = attractor_info['attractor']
+            print(f"  ・{attractor.name}")
+            print(f"    距離: {attractor_info['distance']:.2f}")
+            print(f"    引力: {attractor_info['force']:.2f}")
+            print(f"    盆地内: {'はい' if attractor_info['in_basin'] else 'いいえ'}")
+            print(f"    タイプ: {'病理的' if attractor.attractor_type == 'pathological' else '健全'}")
+            if attractor_info.get('viscosity_modified', False):
+                print(f"    ※粘性により移動困難")
+    
+    if attractor_result['trajectory_prediction']['target']:
+        print(f"\n軌道予測:")
+        print(f"  方向: {attractor_result['trajectory_prediction']['target']}")
+        print(f"  推定到達時間: {attractor_result['trajectory_prediction']['estimated_time']:.1f}")
+        if attractor_result['trajectory_prediction'].get('viscosity_delayed', False):
+            print(f"  ※高粘性により到達時間延長")
+    
+    print(f"\n脱出難易度: {attractor_result['escape_difficulty']:.2f}")
+    print(f"粘性効果: {attractor_result['viscosity_effect']:.2f}倍の移動抵抗")
+    
     if integrated['integrated_deviation']['patterns']:
         print("\n【統合的乖離パターン】")
         for pattern in integrated['integrated_deviation']['patterns']:
@@ -2627,7 +2655,6 @@ if __name__ == "__main__":
     state, evaluation = demonstrate_integrated_system()
     
     print("\n【システム情報】")
-    print(f"総質問数: {len(evaluation.get('all_questions', {}))}項目")
     print(f"評価次元: PATH×自己側面×社会領域×粘性パターン")
     print(f"時間モデル: Λ³トランザクションベース（非時間依存）")
     print("\n評価完了。")
