@@ -2196,27 +2196,101 @@ def demonstrate_integrated_system():
     
     # サンプル回答（基本 + 社会的領域）
     sample_responses = {
-        # 既存の基本質問への回答
-        'ni_1': 4, 'ni_2': 5, 'ni_3': 4,
-        'te_1': 4, 'te_2': 3,
-        'se_1': 5, 'se_2': 4,
-        'gen_1': 4, 'gen_2': 4,
+        # Ni（主機能）の過剰使用
+        'ni_1': 4,      # 将来の悪い結果ばかり想像
+        'ni_2': 5,      # 完璧な計画で実行できない
+        'ni_3': 4,      # 複雑な内的世界に閉じこもる
         
-        # 社会的領域の質問への回答
-        'work_resonance_1': 2,     # 職場で本音を言えない
-        'work_shadow_1': 4,        # Shadow噴出
-        'work_energy_1': 5,        # エネルギー消耗
-        'work_safety_1': 2,        # 安全でない
+        # Te（補助機能）の機能不全
+        'te_1': 4,      # 効率的な問題解決ができない
+        'te_2': 3,      # 論理的思考で混乱
         
-        'family_resonance_1': 4,   # 家族では本音
-        'family_shadow_1': 2,      # Shadow少ない
-        'family_energy_1': 2,      # エネルギー充電
-        'family_safety_1': 5,      # とても安全
+        # Fi（第三機能）の不健全な発露
+        'fi_1': 3,      # 感情の爆発
+        'fi_2': 4,      # 価値観へのこだわり
         
-        'online_resonance_1': 2,   # オンラインで本音言えない
-        'online_shadow_1': 5,      # Shadow噴出激しい
-        'online_energy_1': 4,      # エネルギー消耗
-        'online_safety_1': 2,      # 安全でない
+        # Se（劣等機能）の暴走
+        'se_1': 5,      # 過度の感覚的刺激
+        'se_2': 4,      # 衝動的行動
+        'se_3': 3,      # 身体的不調への注目
+        
+        # 全体的なバランス崩壊
+        'gen_1': 4,     # 自分でない感覚
+        'gen_2': 4,     # 以前できたことができない
+        
+        # 生活習慣・身体状態
+        'sleep_1': 4,   # 5-6時間睡眠
+        'sleep_2': 4,   # 睡眠の質が悪い
+        'meal_1': 3,    # 時々不規則な食事
+        'meal_2': 3,    # 時々食事を抜く
+        
+        # シャドウ機能 - Ne
+        'sh_ne_1': 4,   # 散漫なアイデアに振り回される
+        'sh_ne_2': 3,   # あらゆる可能性で混乱
+        
+        # シャドウ機能 - Ti
+        'sh_ti_1': 3,   # 過度の論理へのこだわり
+        'sh_ti_2': 4,   # 細かい矛盾で全体を見失う
+        
+        # シャドウ機能 - Fe
+        'sh_fe_1': 4,   # 他人の感情に振り回される
+        'sh_fe_2': 3,   # 表面的な調和
+        
+        # シャドウ機能 - Si
+        'sh_si_1': 4,   # 過去の失敗に囚われる
+        'sh_si_2': 3,   # 身体の不調に過度に注目
+        
+        # 拍動イベント
+        'pulse_1': 4,   # 週2-3回の感情の高まり
+        'pulse_2': 4,   # 拍動後の疲労感
+        
+        # PATH葛藤
+        'conflict_1': 4, # 論理vs感情の葛藤
+        'conflict_2': 4, # ビジョンvs現実の葛藤
+        
+        # メタ認知とノイズ
+        'meta_1': 4,    # 客観的観察の困難
+        'meta_2': 4,    # 頭の中のノイズ
+        
+        # 重大イベント
+        'event_1': 3,   # 中程度の喪失体験
+        'event_2': 4,   # 影響がかなり続いている
+        
+        # 社会的領域 - 職場
+        'work_resonance_1': 2,      # 本音を言えない
+        'work_shadow_1': 4,         # Shadow噴出
+        'work_support_1': 2,        # サポート不足
+        'work_tension_1': 5,        # 常に緊張
+        'work_energy_1': 5,         # とても消耗
+        'work_authenticity_1': 2,   # 本来の自分でいられない
+        'work_safety_1': 2,         # 安全でない
+        
+        # 社会的領域 - 家族
+        'family_resonance_1': 4,    # だいたい本音
+        'family_shadow_1': 2,       # Shadow少ない
+        'family_support_1': 4,      # 数人が助けてくれる
+        'family_tension_1': 2,      # あまり緊張しない
+        'family_energy_1': 2,       # やや充電される
+        'family_authenticity_1': 4, # だいたい本来の自分
+        'family_safety_1': 5,       # とても安全
+        
+        # 社会的領域 - 友人
+        'friends_resonance_1': 3,   # 時々本音
+        'friends_shadow_1': 3,      # 時々Shadow
+        'friends_support_1': 3,     # 2-3人いる
+        'friends_tension_1': 3,     # 時々緊張
+        'friends_energy_1': 3,      # 変わらない
+        'friends_authenticity_1': 3,# 半分くらい本来の自分
+        'friends_safety_1': 3,      # まあまあ安全
+        
+        # 社会的領域 - オンライン
+        'online_resonance_1': 2,    # あまり本音を言えない
+        'online_shadow_1': 5,       # Shadow噴出頻繁
+        'online_support_1': 1,      # 誰もいない
+        'online_tension_1': 4,      # よく緊張
+        'online_energy_1': 4,       # やや消耗
+        'online_authenticity_1': 2, # あまり本来の自分でない
+        'online_safety_1': 2,       # あまり安全でない
     }
     
     # 統合評価の実行
