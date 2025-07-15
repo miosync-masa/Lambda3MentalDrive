@@ -1,8 +1,14 @@
-# Lambda3 Mental Dynamics Assessment System
+<p align="center">
+  <img src="https://www.miosync.link/github/0_2.jpg" alt="Lambda³" width="100"/>
+</p>
+
+<h1 align="center">Lambda3 Mental Dynamics Assessment System</h1>
+
+<p align="center">
+  <strong>A mathematical framework for psychological dynamics assessment based on Lambda³ (Λ³) Theory, integrating Jungian cognitive functions with tensor mathematics and physics-inspired models.</strong>
+</p>
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13fnG8PtTiqTO9fep7F_gypE0iwQYeV0-?usp=sharing)
-
-A mathematical framework for psychological dynamics assessment based on Lambda³ (Λ³) Theory, integrating Jungian cognitive functions with tensor mathematics and physics-inspired models.
 
 ## Overview
 
