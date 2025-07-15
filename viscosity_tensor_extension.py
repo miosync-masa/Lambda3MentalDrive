@@ -1,5 +1,5 @@
 """
-Λ³理論 レジーム粘性テンソル拡張モジュール
+Λ³理論 レジーム粘性テンソル拡張モジュール（修正版）
 Regime Viscosity Tensor Extension for Lambda3 Theory
 
 レジーム粘性：状態に「とどまり続ける力」を数理化
@@ -132,7 +132,7 @@ class RegimeViscosity:
             self._initialize_viscosity_patterns()
     
     def _initialize_path_self_modifiers(self):
-        """PATH×自己側面の相互作用による粘性修正値"""
+        """PATH×自己側面の相互作用による粘性修正値（より現実的な値に調整）"""
         # 「抜けやすい」組み合わせ（負の値）
         self.path_self_modifiers[('Se', 'core')] = -0.3      # 現実接触×core高
         self.path_self_modifiers[('Te', 'core')] = -0.2      # 実行力×core高
@@ -150,44 +150,65 @@ class RegimeViscosity:
         self.path_self_modifiers[('Ni', 'core_low')] = 0.3   # Ni過活性×core低
         self.path_self_modifiers[('Ti', 'core_low')] = 0.25  # Ti過活性×core低
         self.path_self_modifiers[('Si', 'core_low')] = 0.2   # Si過活性×core低
+        
+        # Shadow高×内向PATH（新規追加）
+        self.path_self_modifiers[('Ni', 'shadow_high')] = 0.35
+        self.path_self_modifiers[('Ti', 'shadow_high')] = 0.3
+        self.path_self_modifiers[('Fi', 'shadow_high')] = 0.25
+        self.path_self_modifiers[('Si', 'shadow_high')] = 0.3
     
     def _initialize_viscosity_patterns(self):
-        """高粘性パターンの定義"""
+        """高粘性パターンの定義（より現実的な閾値に調整）"""
         self.viscosity_patterns = [
             ViscosityPattern(
                 pattern_id='ni_shadow_rumination',
                 description='Ni×Shadow - 内的反芻地獄',
-                required_paths={'Ni': 0.7},
-                required_self_aspects={'shadow': (0.6, 1.0), 'core': (0, 0.4)},
+                required_paths={'Ni': 0.4},  # 0.7→0.4に緩和
+                required_self_aspects={'shadow': (0.6, 1.0)},  # coreの条件を削除
                 viscosity_contribution=0.4
             ),
             ViscosityPattern(
                 pattern_id='si_trauma_loop',
                 description='Si×Shadow - 過去トラウマループ',
-                required_paths={'Si': 0.6},
-                required_self_aspects={'shadow': (0.7, 1.0)},
+                required_paths={'Si': 0.4},  # 0.6→0.4に緩和
+                required_self_aspects={'shadow': (0.65, 1.0)},  # 0.7→0.65に緩和
                 viscosity_contribution=0.35
             ),
             ViscosityPattern(
                 pattern_id='ti_isolation_fortress',
                 description='Ti×低Social - 論理の孤立要塞',
-                required_paths={'Ti': 0.7},
-                required_self_aspects={'social': (0, 0.3)},
+                required_paths={'Ti': 0.45},  # 0.7→0.45に緩和
+                required_self_aspects={'social': (0, 0.35)},  # 0.3→0.35に緩和
                 viscosity_contribution=0.3
             ),
             ViscosityPattern(
                 pattern_id='ideal_reality_gap',
                 description='高Ideal×低Core - 理想と現実の断絶',
                 required_paths={},  # PATH非依存
-                required_self_aspects={'ideal': (0.7, 1.0), 'core': (0, 0.4)},
+                required_self_aspects={'ideal': (0.65, 1.0), 'core': (0, 0.75)},  # 条件緩和
                 viscosity_contribution=0.35
             ),
             ViscosityPattern(
                 pattern_id='shadow_overwhelm',
                 description='Shadow支配 - 自己の影に飲まれる',
                 required_paths={},  # PATH非依存
-                required_self_aspects={'shadow': (0.8, 1.0), 'core': (0, 0.5)},
+                required_self_aspects={'shadow': (0.75, 1.0)},  # coreとの比較を削除、単純化
                 viscosity_contribution=0.45
+            ),
+            # 新規パターン追加
+            ViscosityPattern(
+                pattern_id='ni_ti_loop',
+                description='Ni-Tiループ - 内的分析地獄',
+                required_paths={'Ni': 0.4, 'Ti': 0.4},
+                required_self_aspects={},  # 自己側面非依存
+                viscosity_contribution=0.35
+            ),
+            ViscosityPattern(
+                pattern_id='low_metacognition_trap',
+                description='メタ認知崩壊 - 自己観察不能',
+                required_paths={},
+                required_self_aspects={'core': (0, 0.5)},  # core低下で発動
+                viscosity_contribution=0.3
             )
         ]
 
@@ -230,7 +251,7 @@ class ViscosityCalculator:
         }
     
     def calculate_current_viscosity(self, state) -> Tuple[float, List[str]]:
-        """現在の総合粘性と活性パターンを計算"""
+        """現在の総合粘性と活性パターンを計算（改善版）"""
         
         # stateが粘性を持っていればそれを使う
         if hasattr(state, 'regime_viscosity'):
@@ -241,44 +262,89 @@ class ViscosityCalculator:
         # 基準値から開始
         total_viscosity = regime_viscosity.base_viscosity
         active_patterns = []
+        
+        # デバッグ情報を収集
+        debug_info = {
+            'base': regime_viscosity.base_viscosity,
+            'modifiers': [],
+            'patterns': []
+        }
             
-        # 1. PATH×自己側面の組み合わせ効果
+        # 1. PATH×自己側面の組み合わせ効果（改善版）
         for (path, aspect), modifier in self.regime_viscosity.path_self_modifiers.items():
             if aspect == 'core':
-                if state.path_states.get(path, 0) > 0.7 and state.Λ_self_aspects['core'] > 0.6:
+                # 通常のcore高状態での効果
+                if state.path_states.get(path, 0) > 0.6 and state.Λ_self_aspects['core'] > 0.6:
                     total_viscosity += modifier
+                    debug_info['modifiers'].append(f"{path}×{aspect}: +{modifier}")
             elif aspect == 'shadow':
-                if state.path_states.get(path, 0) > 0.6 and state.Λ_self_aspects['shadow'] > 0.6:
+                # Shadow高状態での効果
+                if state.path_states.get(path, 0) > 0.4 and state.Λ_self_aspects['shadow'] > 0.6:
                     total_viscosity += modifier
+                    debug_info['modifiers'].append(f"{path}×{aspect}: +{modifier}")
+            elif aspect == 'shadow_high':
+                # Shadow特に高い状態での追加効果
+                if state.path_states.get(path, 0) > 0.35 and state.Λ_self_aspects['shadow'] > 0.75:
+                    total_viscosity += modifier
+                    debug_info['modifiers'].append(f"{path}×shadow_high: +{modifier}")
             elif aspect == 'social':
-                if state.path_states.get(path, 0) > 0.6 and state.Λ_self_aspects['social'] > 0.6:
+                # Social高状態での効果
+                if state.path_states.get(path, 0) > 0.5 and state.Λ_self_aspects['social'] > 0.5:
                     total_viscosity += modifier
+                    debug_info['modifiers'].append(f"{path}×{aspect}: +{modifier}")
             elif aspect == 'ideal':
-                if state.path_states.get(path, 0) > 0.6 and state.Λ_self_aspects['ideal'] > 0.7:
+                # Ideal高状態での効果
+                if state.path_states.get(path, 0) > 0.4 and state.Λ_self_aspects['ideal'] > 0.65:
                     total_viscosity += modifier
+                    debug_info['modifiers'].append(f"{path}×{aspect}: +{modifier}")
             elif aspect == 'core_low':
-                if state.path_states.get(path, 0) > 0.6 and state.Λ_self_aspects['core'] < 0.4:
+                # Core低下時の効果
+                if state.path_states.get(path, 0) > 0.4 and state.Λ_self_aspects['core'] < 0.5:
                     total_viscosity += modifier
+                    debug_info['modifiers'].append(f"{path}×{aspect}: +{modifier}")
         
         # 2. 特定の高粘性パターンチェック
         for pattern in self.regime_viscosity.viscosity_patterns:
             if self._check_pattern_active(pattern, state):
                 total_viscosity += pattern.viscosity_contribution
                 active_patterns.append(pattern.pattern_id)
+                debug_info['patterns'].append(f"{pattern.pattern_id}: +{pattern.viscosity_contribution}")
         
-        # 3. 環境因子の影響
-        env_factors = regime_viscosity.environmental_factors  # self.を削除
+        # 3. 特殊な状態の追加チェック（新規）
+        # Shadow > Coreの場合の追加粘性
+        if state.Λ_self_aspects['shadow'] > state.Λ_self_aspects['core']:
+            shadow_dominance = (state.Λ_self_aspects['shadow'] - state.Λ_self_aspects['core']) * 0.5
+            total_viscosity += shadow_dominance
+            debug_info['modifiers'].append(f"shadow_dominance: +{shadow_dominance:.2f}")
+        
+        # メタ認知低下による追加粘性
+        if hasattr(state, 'metacognition') and state.metacognition < 0.3:
+            metacog_penalty = (0.3 - state.metacognition) * 0.8
+            total_viscosity += metacog_penalty
+            debug_info['modifiers'].append(f"low_metacognition: +{metacog_penalty:.2f}")
+        
+        # 高ノイズによる追加粘性
+        if hasattr(state, 'perception_noise') and state.perception_noise > 0.5:
+            noise_penalty = (state.perception_noise - 0.5) * 0.4
+            total_viscosity += noise_penalty
+            debug_info['modifiers'].append(f"high_noise: +{noise_penalty:.2f}")
+        
+        # 4. 環境因子の影響
+        env_factors = regime_viscosity.environmental_factors
         total_viscosity *= env_factors['sleep_factor']
         total_viscosity *= env_factors['nutrition_factor']
         total_viscosity += env_factors['recent_event_intensity'] * 0.3
         
-        # 4. 範囲制限
+        # 5. 範囲制限
         total_viscosity = np.clip(total_viscosity, 0.1, 2.0)
+        
+        # デバッグ出力（必要に応じて）
+        # print(f"粘性計算デバッグ: {debug_info}")
         
         return total_viscosity, active_patterns
     
     def _check_pattern_active(self, pattern: ViscosityPattern, state) -> bool:
-        """特定のパターンが活性化しているかチェック"""
+        """特定のパターンが活性化しているかチェック（改善版）"""
         
         # PATH条件のチェック
         for path, threshold in pattern.required_paths.items():
@@ -289,6 +355,12 @@ class ViscosityCalculator:
         for aspect, (min_val, max_val) in pattern.required_self_aspects.items():
             aspect_value = state.Λ_self_aspects.get(aspect, 0.5)
             if not (min_val <= aspect_value <= max_val):
+                return False
+        
+        # 特殊パターンの追加チェック
+        if pattern.pattern_id == 'low_metacognition_trap':
+            # メタ認知も確認
+            if hasattr(state, 'metacognition') and state.metacognition > 0.3:
                 return False
         
         return True
@@ -331,22 +403,37 @@ class ViscosityCalculator:
             'viscosity_level': viscosity_level,
             'description': description,
             'active_patterns': pattern_details,
-            'primary_factors': self._identify_primary_factors(state, active_patterns)
+            'primary_factors': self._identify_primary_factors(state, active_patterns, current_viscosity)
         }
     
-    def _identify_primary_factors(self, state, active_patterns: List[str]) -> List[str]:
-        """粘性の主要因を特定"""
+    def _identify_primary_factors(self, state, active_patterns: List[str], 
+                                current_viscosity: float) -> List[str]:
+        """粘性の主要因を特定（改善版）"""
         factors = []
         
         # 個体要因
         if self.regime_viscosity.base_viscosity > 0.7:
             factors.append('高い基礎粘性体質')
         
+        # Shadow支配
+        if state.Λ_self_aspects['shadow'] > state.Λ_self_aspects['core']:
+            factors.append('Shadow機能の支配')
+        
+        # メタ認知崩壊
+        if hasattr(state, 'metacognition') and state.metacognition < 0.3:
+            factors.append('メタ認知機能の崩壊')
+        
+        # 高ノイズ
+        if hasattr(state, 'perception_noise') and state.perception_noise > 0.5:
+            factors.append('知覚ノイズの増大')
+        
         # パターン要因
         if 'ni_shadow_rumination' in active_patterns:
             factors.append('内的反芻による固着')
         if 'shadow_overwhelm' in active_patterns:
             factors.append('Shadow機能の圧倒')
+        if 'ni_ti_loop' in active_patterns:
+            factors.append('Ni-Tiループによる固着')
         
         # 環境要因
         env = self.regime_viscosity.environmental_factors
@@ -356,6 +443,10 @@ class ViscosityCalculator:
             factors.append('栄養不良による粘性増加')
         if env['recent_event_intensity'] > 0.5:
             factors.append('最近のストレスイベント')
+        
+        # 身体的枯渇
+        if hasattr(state, 'Λ_bod') and state.Λ_bod < 0.4:
+            factors.append('身体的エネルギーの枯渇')
         
         return factors
 
@@ -476,6 +567,48 @@ class ViscosityInterventions:
                 )
             ],
             
+            'ni_ti_loop': [
+                InterventionStrategy(
+                    transaction_type='fe_connection',
+                    description='他者との感情的つながりを意図的に作る',
+                    target_paths=['Fe'],
+                    expected_viscosity_reduction=0.25
+                ),
+                InterventionStrategy(
+                    transaction_type='se_physical_activity',
+                    description='激しい身体活動で思考ループを中断',
+                    target_paths=['Se'],
+                    expected_viscosity_reduction=0.3
+                ),
+                InterventionStrategy(
+                    transaction_type='te_action_plan',
+                    description='具体的な行動計画の作成と即実行',
+                    target_paths=['Te'],
+                    expected_viscosity_reduction=0.2
+                )
+            ],
+            
+            'low_metacognition_trap': [
+                InterventionStrategy(
+                    transaction_type='mindfulness_practice',
+                    description='マインドフルネス瞑想で観察者視点を養う',
+                    target_paths=['metacognition'],
+                    expected_viscosity_reduction=0.2
+                ),
+                InterventionStrategy(
+                    transaction_type='journaling',
+                    description='構造化された日記で自己観察力を回復',
+                    target_paths=['metacognition'],
+                    expected_viscosity_reduction=0.15
+                ),
+                InterventionStrategy(
+                    transaction_type='feedback_loop',
+                    description='信頼できる他者からの定期的フィードバック',
+                    target_paths=['Fe', 'metacognition'],
+                    expected_viscosity_reduction=0.25
+                )
+            ],
+            
             # 環境要因への介入
             'sleep_deficiency': [
                 InterventionStrategy(
@@ -563,6 +696,19 @@ class ViscosityInterventions:
                     'intervention': strategy,
                     'priority': 'medium'
                 })
+        
+        # 一般的な高粘性への対処（パターンが検出されなかった場合）
+        if not recommendations['immediate_actions'] and diagnosis['viscosity_value'] > 0.8:
+            # Shadow支配への対処
+            if state.Λ_self_aspects['shadow'] > state.Λ_self_aspects['core']:
+                shadow_strategies = self.intervention_map.get('shadow_overwhelm', [])
+                if shadow_strategies:
+                    recommendations['immediate_actions'].append({
+                        'pattern': 'shadow_dominance',
+                        'intervention': shadow_strategies[0],
+                        'priority': 'high'
+                    })
+                    recommendations['expected_total_reduction'] += shadow_strategies[0].expected_viscosity_reduction
         
         # 維持行動の推奨
         if diagnosis['viscosity_value'] < 0.5:
@@ -684,25 +830,28 @@ def demonstrate_viscosity_system():
         'event_1': 3   # 中程度のストレスイベント
     }
     
-    # 仮想的な状態（Ni-Shadow反芻パターン）
+    # 仮想的な状態（Shadow支配パターン）
     class MockState:
         def __init__(self):
             self.path_states = {
-                'Ni': 0.8,  # 高Ni
-                'Te': 0.3,  # 低Te
-                'Fi': 0.5,
-                'Se': 0.2,  # 低Se
-                'Ne': 0.3,
-                'Ti': 0.4,
-                'Fe': 0.3,
-                'Si': 0.7   # 高Si
+                'Ni': 0.42,  # 中程度のNi
+                'Te': 0.46,
+                'Fi': 0.36,
+                'Se': 0.27,  # 低Se
+                'Ne': 0.46,
+                'Ti': 0.46,
+                'Fe': 0.51,
+                'Si': 0.46
             }
             self.Λ_self_aspects = {
-                'core': 0.3,    # 低core
-                'ideal': 0.8,   # 高ideal
-                'social': 0.4,
-                'shadow': 0.7   # 高shadow
+                'core': 0.72,
+                'ideal': 0.70,
+                'social': 0.26,  # 低social
+                'shadow': 0.79   # 高shadow
             }
+            self.metacognition = 0.19  # 低メタ認知
+            self.perception_noise = 0.57  # 高ノイズ
+            self.Λ_bod = 0.29  # 低身体エネルギー
     
     # システム初期化
     system = IntegratedViscositySystem()
@@ -710,6 +859,7 @@ def demonstrate_viscosity_system():
     
     # 状態作成
     state = MockState()
+    state.regime_viscosity = system.regime_viscosity
     
     # 分析実行
     result = system.analyze_and_recommend(state)
