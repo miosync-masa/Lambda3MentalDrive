@@ -2295,6 +2295,13 @@ def demonstrate_integrated_system():
     
     # 統合評価の実行
     evaluation = assessor.calculate_integrated_evaluation(state, sample_responses)
+
+    # 評価結果を反映してPATH状態を更新
+    state.update_path_states_with_interaction()
+    
+    # 時間ステップを進めて動的な変化を反映
+    for _ in range(3):  # 数ステップ進める
+        state.time_step_update()
     
     # 結果表示
     print("【基本評価結果】")
