@@ -232,10 +232,16 @@ class ViscosityCalculator:
     def calculate_current_viscosity(self, state) -> Tuple[float, List[str]]:
         """現在の総合粘性と活性パターンを計算"""
         
-        # 基準値から開始
-        total_viscosity = self.regime_viscosity.base_viscosity
-        active_patterns = []
+        # stateが粘性を持っていればそれを使う
+        if hasattr(state, 'regime_viscosity'):
+            regime_viscosity = state.regime_viscosity
+        else:
+            regime_viscosity = self.regime_viscosity
         
+        # 基準値から開始
+        total_viscosity = regime_viscosity.base_viscosity
+        active_patterns = []
+            
         # 1. PATH×自己側面の組み合わせ効果
         for (path, aspect), modifier in self.regime_viscosity.path_self_modifiers.items():
             if aspect == 'core':
@@ -261,7 +267,7 @@ class ViscosityCalculator:
                 active_patterns.append(pattern.pattern_id)
         
         # 3. 環境因子の影響
-        env_factors = self.regime_viscosity.environmental_factors
+        env_factors = regime_viscosity.environmental_factors  # self.を削除
         total_viscosity *= env_factors['sleep_factor']
         total_viscosity *= env_factors['nutrition_factor']
         total_viscosity += env_factors['recent_event_intensity'] * 0.3
