@@ -1128,6 +1128,10 @@ class IntegratedDynamicLambda3State(DynamicLambda3State):
         self.social_influence_on_core = 0.0
         self.social_influence_on_shadow = 0.0
         self.social_influence_on_paths = {}
+
+        # レジーム粘性の追加（新規）
+        from viscosity_tensor_extension import RegimeViscosity
+        self.regime_viscosity = RegimeViscosity()
     
     def update_from_social_domains(self):
         """社会的領域の状態から全体的なΛ³状態を更新"""
@@ -2193,6 +2197,9 @@ def demonstrate_integrated_system():
     # 統合状態の初期化
     state = IntegratedDynamicLambda3State()
     assessor = IntegratedSocialMBTIAssessment()
+    # 粘性システムの初期化（追加）
+    from viscosity_tensor_extension import IntegratedViscositySystem
+    viscosity_system = IntegratedViscositySystem()
     
     # サンプル回答（基本 + 社会的領域）
     sample_responses = {
@@ -2291,18 +2298,31 @@ def demonstrate_integrated_system():
         'online_energy_1': 4,       # やや消耗
         'online_authenticity_1': 2, # あまり本来の自分でない
         'online_safety_1': 2,       # あまり安全でない
+        
+         # 粘性体質質問（追加）
+        'visc_1': 4,  # 2-3日引きずる
+        'visc_2': 4,  # よく気分が台無しになる
+        'visc_3': 4,  # 切り替えがとても難しい
+        'visc_4': 4,  # 翌日まで怒りが続く
+        'visc_5': 5,  # 毎日のように過去が蘇る
     }
+
+    # 粘性システムの初期化（追加）
+    viscosity_system.initialize_from_responses(sample_responses)
     
     # 統合評価の実行
     evaluation = assessor.calculate_integrated_evaluation(state, sample_responses)
-
+    
     # 評価結果を反映してPATH状態を更新
     state.update_path_states_with_interaction()
+    
+    # 粘性分析の実行（更新された状態で）
+    viscosity_analysis = viscosity_system.analyze_and_recommend(state)
     
     # 時間ステップを進めて動的な変化を反映
     for _ in range(3):  # 数ステップ進める
         state.time_step_update()
-    
+        
     # 結果表示
     print("【基本評価結果】")
     print(f"重症度: {evaluation['severity']}")
@@ -2337,6 +2357,30 @@ def demonstrate_integrated_system():
     print("\n【統合的推奨事項】")
     for i, rec in enumerate(evaluation['integrated_recommendations'][:10], 1):
         print(f"{i}. {rec}")
+    
+    # 粘性分析結果の表示（追加）
+    print("\n【レジーム粘性分析】")
+    v_diagnosis = viscosity_analysis['diagnosis']
+    print(f"基準粘性（ν₀）: {viscosity_analysis['viscosity_metrics']['base']:.2f}")
+    print(f"現在の総合粘性: {v_diagnosis['viscosity_value']:.2f}")
+    print(f"粘性レベル: {v_diagnosis['description']}")
+    
+    if v_diagnosis['active_patterns']:
+        print("\n活性化している高粘性パターン:")
+        for pattern in v_diagnosis['active_patterns']:
+            print(f"・{pattern['description']} (+{pattern['contribution']:.2f})")
+    
+    # 粘性を考慮した統合的推奨（追加）
+    print("\n【粘性を考慮した介入優先度】")
+    v_recommendations = viscosity_analysis['recommendations']
+    if v_recommendations['immediate_actions']:
+        for action in v_recommendations['immediate_actions']:
+            intervention = action['intervention']
+            print(f"◆ {intervention.description}")
+            print(f"  → 期待される粘性低下: -{intervention.expected_viscosity_reduction:.2f}")
+    
+    # 統合結果に粘性分析を追加
+    evaluation['viscosity_analysis'] = viscosity_analysis
     
     return state, evaluation
 
