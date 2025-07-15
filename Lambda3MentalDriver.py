@@ -10,8 +10,13 @@ from social_tensor_extension import (
     MultidimensionalSocialSelf, EnhancedSocialDynamics,
     MultidimensionalSocialAssessment
 )
-
-# =========== 既存のコードから必要な部分 ===========
+# レジーム粘性テンソル拡張のインポート（追加）
+from viscosity_tensor_extension import (
+    IntegratedViscositySystem,
+    RegimeViscosity,
+    ViscosityCalculator,
+    ViscosityInterventions
+)
 
 # ユング8機能ベースPATH
 BASE_PATHS = ['Ne', 'Ni', 'Te', 'Ti', 'Fe', 'Fi', 'Se', 'Si']
