@@ -5,7 +5,7 @@
 <h1 align="center">Lambda3 Mental Dynamics Assessment System</h1>
 
 <p align="center">
-  <strong>A mathematical framework for psychological dynamics assessment based on Lambda³ (Λ³) Theory, integrating Jungian cognitive functions with tensor mathematics and physics-inspired models.</strong>
+  <strong>A mathematical framework for psychological dynamics assessment based on Lambda³ (Λ³) Theory, </br>integrating Jungian cognitive functions with tensor mathematics and physics-inspired models.</strong>
 </p>
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13fnG8PtTiqTO9fep7F_gypE0iwQYeV0-?usp=sharing)
