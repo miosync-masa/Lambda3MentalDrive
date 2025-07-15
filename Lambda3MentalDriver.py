@@ -242,27 +242,20 @@ class Lambda3ManifoldAnalyzer:
         return 0.1 + shadow_activation * 0.5 + conflict_curvature
     
     def _calculate_geodesic_distance(self, point1: np.ndarray, 
-                                 point2: np.ndarray, 
-                                 curvature: float) -> float:
-        """測地線距離の計算"""
-        # PATH次元での差分ベクトル
-        diff = point2[:8] - point1[:8]
+                                   point2: np.ndarray, 
+                                   curvature: float) -> float:
+        """測地線距離の計算（簡略化版）"""
+        # ユークリッド距離
+        euclidean = np.linalg.norm(point2 - point1)
         
-        # メトリックテンソルで重み付けた距離を最初に計算
-        metric_distance = np.sqrt(diff.T @ self.metric_tensor @ diff)
+        # 曲率による補正（曲率が高いほど実際の距離は長い）
+        geodesic = euclidean * (1 + curvature)
         
-        # 残りの次元（感情・欲求など）がある場合は通常のユークリッド距離を計算して追加
-        if len(point1) > 8:
-            extra_diff = point2[8:] - point1[8:]
-            extra_distance = np.linalg.norm(extra_diff)
-            total_distance = np.sqrt(metric_distance**2 + extra_distance**2)
-        else:
-            total_distance = metric_distance
+        # メトリックテンソルによる重み付け
+        diff = point2[:8] - point1[:8]  # PATH次元のみ
+        weighted_dist = np.sqrt(diff.T @ self.metric_tensor @ diff)
         
-        # 曲率による補正
-        geodesic_distance = total_distance * (1 + curvature)
-        
-        return geodesic_distance
+        return (geodesic + weighted_dist) / 2
     
     def _define_healthy_state_coordinates(self) -> np.ndarray:
         """健全状態の座標を定義（INTJ用）"""
@@ -2552,7 +2545,7 @@ def demonstrate_integrated_system():
     if v_recommendations['expected_total_reduction'] > 0:
         print(f"\n【介入効果の見込み】")
         print(f"現在の粘性: {v_diagnosis['viscosity_value']:.2f}")
-        predicted_viscosity = v_diagnosis['viscosity_value'] - v_recommendations['expected_total_reduction']
+        predicted_viscosity = max(0.1, v_diagnosis['viscosity_value'] - v_recommendations['expected_total_reduction'])
         print(f"介入後の予測粘性: {predicted_viscosity:.2f}")
         print(f"（{v_recommendations['expected_total_reduction']:.2f}ポイントの低下）")
     
