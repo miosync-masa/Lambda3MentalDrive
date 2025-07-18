@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://www.miosync.link/github/0_2.jpg" alt="Lambda³" width="100"/>
+  <img src="https://www.miosync.link/github/0_4.jpg" alt="Lambda³" width="400"/>
 </p>
 
 <h1 align="center">Lambda3 Mental Dynamics Assessment System</h1>
